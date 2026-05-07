@@ -4,26 +4,25 @@
 // Get a free hosted Postgres database in seconds: `npx create-db`
 
 generator client {
-  provider        = "prisma-client-js"
+  provider = "prisma-client-js"
   // Enforce explicit output generation
-  output          = "./generated/client"
+  output   = "./generated/client"
 }
 
 datasource db {
   provider = "postgresql"
 }
 
-
 // Global User - The "Login with Stride" identity
 model User {
-  id           String    @id @default(uuid())
-  email        String    @unique
+  id           String   @id @default(uuid())
+  email        String   @unique
   passwordHash String
   firstName    String?
   lastName     String?
-  memberships  Member[]  // One user can have many memberships
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  memberships  Member[] // One user can have many memberships
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 }
 
 // Tenant - The Organization (Gym/Club)
@@ -37,13 +36,13 @@ model Tenant {
 
 // Member - The bridge between a User and a Tenant
 model Member {
-  id        String   @id @default(uuid())
-  userId    String
-  tenantId  String
-  role      Role     @default(MEMBER)
-  status    Status   @default(ACTIVE)
-  user      User     @relation(fields: [userId], references: [id])
-  tenant    Tenant   @relation(fields: [tenantId], references: [id])
+  id       String @id @default(uuid())
+  userId   String
+  tenantId String
+  role     Role   @default(MEMBER)
+  status   Status @default(ACTIVE)
+  user     User   @relation(fields: [userId], references: [id])
+  tenant   Tenant @relation(fields: [tenantId], references: [id])
 
   @@unique([userId, tenantId]) // Critical: A user is only one 'Member' per gym
 }
