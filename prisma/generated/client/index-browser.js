@@ -123,9 +123,12 @@ exports.Prisma.TransactionIsolationLevel = makeStrictEnum({
 exports.Prisma.UserScalarFieldEnum = {
   id: 'id',
   email: 'email',
+  phone: 'phone',
   passwordHash: 'passwordHash',
   firstName: 'firstName',
   lastName: 'lastName',
+  isGlobalAdmin: 'isGlobalAdmin',
+  isActive: 'isActive',
   createdAt: 'createdAt',
   updatedAt: 'updatedAt'
 };
@@ -134,20 +137,50 @@ exports.Prisma.TenantScalarFieldEnum = {
   id: 'id',
   name: 'name',
   slug: 'slug',
-  createdAt: 'createdAt'
+  domain: 'domain',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
 };
 
-exports.Prisma.MemberScalarFieldEnum = {
+exports.Prisma.MembershipScalarFieldEnum = {
   id: 'id',
   userId: 'userId',
   tenantId: 'tenantId',
-  role: 'role',
-  status: 'status'
+  status: 'status',
+  metadata: 'metadata',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+};
+
+exports.Prisma.MembershipRoleScalarFieldEnum = {
+  id: 'id',
+  membershipId: 'membershipId',
+  role: 'role'
+};
+
+exports.Prisma.AccountScalarFieldEnum = {
+  id: 'id',
+  userId: 'userId',
+  type: 'type',
+  provider: 'provider',
+  providerAccountId: 'providerAccountId'
+};
+
+exports.Prisma.SessionScalarFieldEnum = {
+  id: 'id',
+  sessionToken: 'sessionToken',
+  userId: 'userId',
+  expires: 'expires'
 };
 
 exports.Prisma.SortOrder = {
   asc: 'asc',
   desc: 'desc'
+};
+
+exports.Prisma.NullableJsonNullValueInput = {
+  DbNull: Prisma.DbNull,
+  JsonNull: Prisma.JsonNull
 };
 
 exports.Prisma.QueryMode = {
@@ -159,6 +192,19 @@ exports.Prisma.NullsOrder = {
   first: 'first',
   last: 'last'
 };
+
+exports.Prisma.JsonNullValueFilter = {
+  DbNull: Prisma.DbNull,
+  JsonNull: Prisma.JsonNull,
+  AnyNull: Prisma.AnyNull
+};
+exports.MembershipStatus = exports.$Enums.MembershipStatus = {
+  PENDING: 'PENDING',
+  ACTIVE: 'ACTIVE',
+  GRACE_PERIOD: 'GRACE_PERIOD',
+  SUSPENDED: 'SUSPENDED'
+};
+
 exports.Role = exports.$Enums.Role = {
   ORG_ADMIN: 'ORG_ADMIN',
   MANAGER: 'MANAGER',
@@ -166,15 +212,13 @@ exports.Role = exports.$Enums.Role = {
   MEMBER: 'MEMBER'
 };
 
-exports.Status = exports.$Enums.Status = {
-  ACTIVE: 'ACTIVE',
-  SUSPENDED: 'SUSPENDED'
-};
-
 exports.Prisma.ModelName = {
   User: 'User',
   Tenant: 'Tenant',
-  Member: 'Member'
+  Membership: 'Membership',
+  MembershipRole: 'MembershipRole',
+  Account: 'Account',
+  Session: 'Session'
 };
 
 /**

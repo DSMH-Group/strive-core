@@ -14,47 +14,129 @@ datasource db {
 }
 
 // Global User - The "Login with Stride" identity
+// ------------------------------------------------------
+// 1. GLOBAL IDENTITY (The "Stride" Account)
+// ------------------------------------------------------
+
 model User {
-  id           String   @id @default(uuid())
-  email        String   @unique
+  id           String  @id @default(uuid())
+  email        String  @unique
+  phone        String? @unique // Crucial for SL market (SMS OTP)
   passwordHash String
-  firstName    String?
-  lastName     String?
-  memberships  Member[] // One user can have many memberships
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-}
+  firstName    String
+  lastName     String
 
-// Tenant - The Organization (Gym/Club)
-model Tenant {
-  id        String   @id @default(uuid())
-  name      String
-  slug      String   @unique // Used for routing (e.g. 'iron-works-gym')
-  members   Member[]
+  // OAuth2 / IAM Fields
+  isGlobalAdmin Boolean @default(false) // Strive Platform Level
+  isActive      Boolean @default(true)
+
+  memberships Membership[]
+  accounts    Account[] // For OAuth2 providers (Google, Apple)
+  sessions    Session[] // For token management
+
   createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("users")
 }
 
-// Member - The bridge between a User and a Tenant
-model Member {
-  id       String @id @default(uuid())
+// ------------------------------------------------------
+// 2. TENANCY (The Organization/Gym)
+// ------------------------------------------------------
+
+model Tenant {
+  id     String  @id @default(uuid())
+  name   String
+  slug   String  @unique // e.g., 'power-gym-negombo'
+  domain String? @unique // For custom whitelabeling
+
+  memberships Membership[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("tenants")
+}
+
+// ------------------------------------------------------
+// 3. AUTHORIZATION (The Bridge)
+// ------------------------------------------------------
+
+model Membership {
+  id       String           @id @default(uuid())
   userId   String
   tenantId String
-  role     Role   @default(MEMBER)
-  status   Status @default(ACTIVE)
-  user     User   @relation(fields: [userId], references: [id])
-  tenant   Tenant @relation(fields: [tenantId], references: [id])
+  status   MembershipStatus @default(ACTIVE)
 
-  @@unique([userId, tenantId]) // Critical: A user is only one 'Member' per gym
+  // Relations
+  user   User   @relation(fields: [userId], references: [id])
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  // This allows "Trainer AND Member" at the same gym
+  roles MembershipRole[]
+
+  // Domain Specific Metadata (JSONB for Extensibility)
+  // Store gym-specific stats, health data, or archery scores here
+  metadata Json?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, tenantId])
+  @@map("memberships")
 }
+
+model MembershipRole {
+  id           String @id @default(uuid())
+  membershipId String
+  role         Role
+
+  membership Membership @relation(fields: [membershipId], references: [id], onDelete: Cascade)
+
+  @@unique([membershipId, role])
+  @@map("membership_roles")
+}
+
+// ------------------------------------------------------
+// 4. IAM & SECURITY ENUMS
+// ------------------------------------------------------
 
 enum Role {
-  ORG_ADMIN
-  MANAGER
-  TRAINER
-  MEMBER
+  ORG_ADMIN // Full control of the Tenant
+  MANAGER // Operations/Billing
+  TRAINER // Session management/Client tracking
+  MEMBER // Paying customer/Progress tracking
 }
 
-enum Status {
+enum MembershipStatus {
+  PENDING
   ACTIVE
+  GRACE_PERIOD // Essential for SL (Handling delayed bank transfers)
   SUSPENDED
+}
+
+// ------------------------------------------------------
+// 5. OAUTH2 / INTEGRATION SUPPORT
+// ------------------------------------------------------
+
+model Account {
+  id                String @id @default(uuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  user              User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@map("accounts")
+}
+
+model Session {
+  id           String   @id @default(uuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
 }
