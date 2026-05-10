@@ -120,3 +120,14 @@
 | **POST** | `/api/v1/messages/broadcast`    | `ORG_ADMIN`, `MANAGER`      | `{ audienceFilter: JSON, channel: 'SMS' \| 'EMAIL', templateId }` | Dispatches bulk SMS (Text.lk) or Email (Resend).                          |
 | **GET**  | `/api/v1/analytics/leaderboard` | ANY valid Tenant JWT        | `?metricType=string`                                              | Returns ranked members based on specific JSONB metrics.                   |
 | **GET**  | `/api/v1/audits`                | `ORG_ADMIN`, `SYSTEM_ADMIN` | -                                                                 | Read-only log of critical state changes (role upgrades, manual payments). |
+
+---
+
+## 10. System Health & Metadata
+
+*Infrastructure Level.*
+
+| Method  | Endpoint               | Auth     | Payload / Query  | Description                              |
+|---------|------------------------|----------|------------------|------------------------------------------|
+| **GET** | `/health`              | Public   | -                | Railway/Liveness probe.                  |
+| **GET** | `/api/v1/meta/resolve` | Internal | `?domain=gym.lk` | Resolves domain to `tenantId` & `theme`. |
