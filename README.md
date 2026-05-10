@@ -1,98 +1,122 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+# STRIVE APP - CORE API SPECIFICATION v1.0
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+**Architecture Stack:** NestJS, PostgreSQL (Relational + JSONB), Prisma/TypeORM  
+**Auth Strategy:** Keycloak (Global Identity) + `X-Tenant-ID` (Local Data Isolation)  
+**Target Market:** Sri Lanka & Global Membership-Driven Organizations
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+---
 
-## Description
+## 🛡0. Architecture & Isolation Rules (The "Golden Rules")
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+1. **Horizontal Isolation:** EVERY endpoint (except Global Identity webhooks) REQUIRES the `X-Tenant-ID` header injected by the Next.js Edge Middleware.
+2. **Vertical Isolation:** B2C endpoints MUST apply an intersection query on the DB level (`tenantId = X` AND `userId = Y`) using the validated JWT `sub` claim. *Never trust a userId passed in a request body or URL param.*
+3. **RBAC Matrix:**
+    - **`SYSTEM_ADMIN`**: Global control. Bypasses `X-Tenant-ID`.
+    - **`ORG_ADMIN`**: Full tenant control. Bypasses intersection query within their tenant.
+    - **`MANAGER`**: Operational B2B control.
+    - **`TRAINER`**: Can read/write attendance and metrics strictly for assigned members.
+    - **`MEMBER`**: B2C access. Strictly limited to intersection queries (own data only).
 
-## Project setup
+---
 
-```bash
-$ npm install
-```
+## 1. Global Identity
+*Platform Level - No `X-Tenant-ID` required.*
 
-## Compile and run the project
+| Method    | Endpoint                | Auth                  | Payload / Query                     | Description                                                                  |
+|:----------|:------------------------|:----------------------|:------------------------------------|:-----------------------------------------------------------------------------|
+| **POST**  | `/api/v1/users/webhook` | Basic Auth (Keycloak) | -                                   | Syncs newly registered Keycloak users to the local PostgreSQL `users` table. |
+| **GET**   | `/api/v1/users/me`      | ANY valid JWT         | -                                   | Fetches the authenticated user's global profile.                             |
+| **PATCH** | `/api/v1/users/me`      | ANY valid JWT         | `{ phone?: string, name?: string }` | Updates global contact details.                                              |
 
-```bash
-# development
-$ npm run start
+---
 
-# watch mode
-$ npm run start:dev
+## 2. Tenant Management
+*B2B Configuration.*
 
-# production mode
-$ npm run start:prod
-```
+| Method    | Endpoint                     | Auth                     | Payload / Query                             | Description                                                                                      |
+|:----------|:-----------------------------|:-------------------------|:--------------------------------------------|:-------------------------------------------------------------------------------------------------|
+| **POST**  | `/api/v1/tenants`            | `SYSTEM_ADMIN`           | `{ name, subdomain, ownerId }`              | Provisions a new gym environment.                                                                |
+| **GET**   | `/api/v1/tenants/{tenantId}` | Public (SSR via Next.js) | -                                           | Returns public config (theme CSS variables, logo URL).                                           |
+| **PATCH** | `/api/v1/tenants`            | `ORG_ADMIN`              | `{ themeConfig?, taxRules?, gatewayKeys? }` | Updates tax rules (VAT/SSCL) and local gateway (PayHere) configurations. Requires `X-Tenant-ID`. |
 
-## Run tests
+---
 
-```bash
-# unit tests
-$ npm run test
+## 3. Membership & Lifecycle
+*Tenant Scoped.*
 
-# e2e tests
-$ npm run test:e2e
+| Method    | Endpoint                          | Auth                              | Payload / Query                                  | Description                                                               |
+|:----------|:----------------------------------|:----------------------------------|:-------------------------------------------------|:--------------------------------------------------------------------------|
+| **POST**  | `/api/v1/members`                 | `ORG_ADMIN`, `MANAGER`            | `{ userId: string, initialRole: Enum }`          | Links a global user to the current tenant.                                |
+| **GET**   | `/api/v1/members`                 | `ORG_ADMIN`, `MANAGER`, `TRAINER` | `?status=ACTIVE&role=MEMBER`                     | Lists members. Trainers only see members assigned to their roster.        |
+| **GET**   | `/api/v1/members/me`              | `MEMBER`                          | -                                                | Returns the active user's specific membership status for the current gym. |
+| **GET**   | `/api/v1/members/{id}`            | `ORG_ADMIN`, `MANAGER`, `TRAINER` | -                                                | Fetches a specific member's tenant profile.                               |
+| **PATCH** | `/api/v1/members/{id}`            | `ORG_ADMIN`, `MANAGER`            | `{ role?: Enum, status?: Enum }`                 | Updates tenant status or assigns internal roles.                          |
+| **POST**  | `/api/v1/members/{id}/transition` | `SYSTEM (CRON)`, `ORG_ADMIN`      | `{ targetState: 'SUSPENDED' \| 'GRACE_PERIOD' }` | State machine trigger for payment failures or manual overrides.           |
 
-# test coverage
-$ npm run test:cov
-```
+---
 
-## Deployment
+## 4. Attendance & Ingress
+*Tenant Scoped.*
 
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
+| Method    | Endpoint                   | Auth                                                  | Payload / Query                       | Description                                                         |
+|:----------|:---------------------------|:------------------------------------------------------|:--------------------------------------|:--------------------------------------------------------------------|
+| **POST**  | `/api/v1/attendances`      | `ORG_ADMIN`, `MANAGER`, `TRAINER`, `IoT_DEVICE_TOKEN` | `{ memberId?, rfidTag?, authMethod }` | Creates a check-in record. Designed to handle raw IoT scanner data. |
+| **GET**   | `/api/v1/attendances`      | `ORG_ADMIN`, `MANAGER`                                | `?startDate=ISO&endDate=ISO`          | Aggregated historical data for staffing heatmaps.                   |
+| **PATCH** | `/api/v1/attendances/{id}` | `ORG_ADMIN`, `MANAGER`, `TRAINER`, `IoT_DEVICE_TOKEN` | `{ checkoutTime: ISO_String }`        | Appends a checkout timestamp to calculate visit duration.           |
 
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
+---
 
-```bash
-$ npm install -g @nestjs/mau
-$ mau deploy
-```
+## 5. Billing & Ledger
+*Tenant Scoped.*
 
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
+| Method   | Endpoint                   | Auth                                         | Payload / Query                                                | Description                                                                        |
+|:---------|:---------------------------|:---------------------------------------------|:---------------------------------------------------------------|:-----------------------------------------------------------------------------------|
+| **POST** | `/api/v1/invoices`         | `ORG_ADMIN`, `MANAGER`, `MEMBER`             | `{ memberId, lineItems: [], type: 'SUBSCRIPTION' \| 'TOKEN' }` | Generates a payable invoice for time-based subs or consumable session tokens.      |
+| **GET**  | `/api/v1/invoices`         | `ORG_ADMIN`, `MANAGER` (All), `MEMBER` (Own) | -                                                              | Paginated invoice history.                                                         |
+| **POST** | `/api/v1/payments/webhook` | Gateway Signature Validation                 | Gateway specific form-data                                     | Unauthenticated webhook receiver for transaction statuses. **MUST BE IDEMPOTENT**. |
+| **POST** | `/api/v1/payments/manual`  | `ORG_ADMIN`, `MANAGER`                       | `{ invoiceId, method: 'CASH' \| 'BANK_TRANSFER', amount }`     | Manually reconciles offline payments into the ledger.                              |
+| **GET**  | `/api/v1/ledger`           | `ORG_ADMIN`                                  | -                                                              | Immutable financial ledger for auditing and localized tax computation.             |
 
-## Resources
+---
 
-Check out a few resources that may come in handy when working with NestJS:
+## 6. Resources & Scheduling
+*Tenant Scoped.*
 
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
+| Method     | Endpoint                | Auth                                        | Payload / Query                                                    | Description                                                                      |
+|:-----------|:------------------------|:--------------------------------------------|:-------------------------------------------------------------------|:---------------------------------------------------------------------------------|
+| **POST**   | `/api/v1/resources`     | `ORG_ADMIN`, `MANAGER`                      | `{ name, type: 'PHYSICAL' \| 'HUMAN', capacity, linkedMemberId? }` | Creates a schedulable entity (e.g., "Lane 1" or "Trainer John").                 |
+| **GET**    | `/api/v1/resources`     | ANY valid Tenant JWT                        | -                                                                  | Lists resources and current availability.                                        |
+| **POST**   | `/api/v1/bookings`      | ANY valid Tenant JWT                        | `{ resourceId, memberId, startTime, endTime }`                     | Reserves a resource slot. (Members book for self, Managers can book for anyone). |
+| **DELETE** | `/api/v1/bookings/{id}` | `ORG_ADMIN`, `MANAGER`, `MEMBER` (If owner) | -                                                                  | Cancels a reservation.                                                           |
 
-## Support
+---
 
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
+## 7. Extensible Metrics & Health
+*Tenant Scoped.*
 
-## Stay in touch
+| Method   | Endpoint              | Auth                | Payload / Query                                                    | Description                                                                 |
+|:---------|:----------------------|:--------------------|:-------------------------------------------------------------------|:----------------------------------------------------------------------------|
+| **POST** | `/api/v1/metrics`     | `TRAINER`, `MEMBER` | `{ metricType: string, data: JSONB }`                              | Logs domain-specific stats (e.g., target scores for archery, 1RM for gyms). |
+| **GET**  | `/api/v1/metrics`     | `TRAINER`, `MEMBER` | `?metricType=string`                                               | Fetches chronological metrics for Next.js charting.                         |
+| **POST** | `/api/v1/health/sync` | `MEMBER`            | `{ provider: 'APPLE_HEALTH' \| 'HEALTH_CONNECT', dataPoints: [] }` | Bulk ingress endpoint for syncing mobile wearable data.                     |
 
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
+---
 
-## License
+## 8. Storage & Documents
+*Tenant Scoped.*
 
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+| Method   | Endpoint                   | Auth                                   | Payload / Query                                         | Description                                                           |
+|:---------|:---------------------------|:---------------------------------------|:--------------------------------------------------------|:----------------------------------------------------------------------|
+| **POST** | `/api/v1/files/upload-url` | ANY valid Tenant JWT                   | `{ fileName, fileType, context: 'WAIVER' \| 'AVATAR' }` | Returns a Pre-signed S3 URL to allow direct client-to-bucket uploads. |
+| **GET**  | `/api/v1/files`            | `ORG_ADMIN`, `MANAGER`, `MEMBER` (Own) | -                                                       | Lists documents associated with a member.                             |
+
+---
+
+## 9. Communications & Auditing
+*Tenant Scoped.*
+
+| Method   | Endpoint                        | Auth                        | Payload / Query                                                   | Description                                                               |
+|:---------|:--------------------------------|:----------------------------|:------------------------------------------------------------------|:--------------------------------------------------------------------------|
+| **POST** | `/api/v1/messages/broadcast`    | `ORG_ADMIN`, `MANAGER`      | `{ audienceFilter: JSON, channel: 'SMS' \| 'EMAIL', templateId }` | Dispatches bulk SMS (Text.lk) or Email (Resend).                          |
+| **GET**  | `/api/v1/analytics/leaderboard` | ANY valid Tenant JWT        | `?metricType=string`                                              | Returns ranked members based on specific JSONB metrics.                   |
+| **GET**  | `/api/v1/audits`                | `ORG_ADMIN`, `SYSTEM_ADMIN` | -                                                                 | Read-only log of critical state changes (role upgrades, manual payments). |
