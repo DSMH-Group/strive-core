@@ -40,6 +40,35 @@ export class MembersService {
         });
     }
 
+    /**
+     * Returns the active user's specific membership for the current gym context.
+     * Vital for the "Login with Stride" flow.
+     */
+    async getMyMembership(tenantId: string, userId: string) {
+        const membership = await this.prisma.membership.findUnique({
+            where: {
+                userId_tenantId: { userId, tenantId }
+            },
+            include: {
+                user: true,
+                roles: true,
+                // We include tenant info so the frontend can render branding (logo, colors)
+                tenant: {
+                    select: {
+                        name: true,
+                        themeConfig: true
+                    }
+                }
+            }
+        });
+
+        if (!membership) {
+            throw new NotFoundException('You do not have an active membership with this gym.');
+        }
+
+        return membership;
+    }
+
     async getMembers(tenantId: string, status?: MembershipStatus, role?: Role) {
         const whereClause: any = { tenantId };
 

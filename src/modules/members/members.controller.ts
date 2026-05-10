@@ -7,6 +7,7 @@ import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import { MembershipStatus, Role } from '@prisma/client'; // <-- Import strict Prisma Enums
 
 @ApiTags('Memberships & Lifecycle')
 @ApiBearerAuth('JWT-auth')
@@ -30,15 +31,15 @@ export class MembersController {
     @Get()
     @Roles('ORG_ADMIN', 'MANAGER', 'TRAINER')
     @ApiOperation({ summary: 'List tenant members' })
-    @ApiQuery({ name: 'status', required: false })
-    @ApiQuery({ name: 'role', required: false })
+    @ApiQuery({ name: 'status', enum: MembershipStatus, required: false }) // Populates Swagger dropdown
+    @ApiQuery({ name: 'role', enum: Role, required: false })               // Populates Swagger dropdown
     async getMembers(
         @Headers('X-Tenant-ID') tenantId: string,
-        @Query('status') status?: string,
-        @Query('role') role?: string,
-        @CurrentUser() currentUser?: any
+        @Query('status') status?: MembershipStatus, // Strictly typed
+        @Query('role') role?: Role,                 // Strictly typed
     ) {
-        return this.membersService.getMembers(tenantId, status, role, currentUser);
+        // FIX: Now correctly passes exactly 3 arguments
+        return this.membersService.getMembers(tenantId, status, role);
     }
 
     @Get('me')
@@ -48,9 +49,8 @@ export class MembersController {
         @Headers('X-Tenant-ID') tenantId: string,
         @CurrentUser() currentUser: any
     ) {
-        // Finds the membership where userId matches the JWT subject
-        // Implementation typically handled via a unique compound key lookup in the service
-        return this.membersService.getMembers(tenantId, undefined, undefined, currentUser);
+        // FIX: Call a dedicated service method utilizing the user's Keycloak ID (sub)
+        return this.membersService.getMyMembership(tenantId, currentUser.sub);
     }
 
     @Get(':id')
