@@ -12,7 +12,7 @@ export class SyncUserWebhookDto {
     @IsEmail()
     email: string;
 
-    @ApiProperty({ example: 'Nimal' })
+    @ApiProperty({ example: 'John' })
     @IsString()
     @IsNotEmpty()
     firstName: string;
