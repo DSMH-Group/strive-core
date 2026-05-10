@@ -120,3 +120,14 @@
 | **POST** | `/api/v1/messages/broadcast`    | `ORG_ADMIN`, `MANAGER`      | `{ audienceFilter: JSON, channel: 'SMS' \| 'EMAIL', templateId }` | Dispatches bulk SMS (Text.lk) or Email (Resend).                          |
 | **GET**  | `/api/v1/analytics/leaderboard` | ANY valid Tenant JWT        | `?metricType=string`                                              | Returns ranked members based on specific JSONB metrics.                   |
 | **GET**  | `/api/v1/audits`                | `ORG_ADMIN`, `SYSTEM_ADMIN` | -                                                                 | Read-only log of critical state changes (role upgrades, manual payments). |
+
+---
+
+## 10. System Health & Monitoring
+*Platform Level - Publicly accessible for PaaS (Railway, AWS, etc.) and uptime monitors. No `X-Tenant-ID` or JWT required.*
+
+| Method  | Endpoint            | Auth           | Payload / Query | Description                                                                                                                                                |
+|:--------|:--------------------|:---------------|:----------------|:-----------------------------------------------------------------------------------------------------------------------------------------------------------|
+| **GET** | `/health/liveness`  | Public         | -               | **Liveness Probe:** Fast check returning HTTP 200 `{"status": "ok"}`. Verifies the Node.js process is alive.                                               |
+| **GET** | `/health/readiness` | Public         | -               | **Readiness Probe:** Checks connections to PostgreSQL, Redis, and Keycloak. Returns HTTP 200 if fully operational, or 503 Service Unavailable if degraded. |
+| **GET** | `/metrics`          | `SYSTEM_ADMIN` | -               | **Prometheus Metrics:** Exposes internal NestJS metrics (memory, active handles) for Grafana scraping.                                                     |
