@@ -6,7 +6,7 @@
 
 ---
 
-## 🛡0. Architecture & Isolation Rules (The "Golden Rules")
+## 0. Architecture & Isolation Rules (The "Golden Rules")
 
 1. **Horizontal Isolation:** EVERY endpoint (except Global Identity webhooks) REQUIRES the `X-Tenant-ID` header injected by the Next.js Edge Middleware.
 2. **Vertical Isolation:** B2C endpoints MUST apply an intersection query on the DB level (`tenantId = X` AND `userId = Y`) using the validated JWT `sub` claim. *Never trust a userId passed in a request body or URL param.*
