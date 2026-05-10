@@ -71,6 +71,7 @@ model Membership {
   userId   String
   tenantId String
   status   MembershipStatus @default(ACTIVE)
+  rfidTag  String?          @unique // <-- Add this to link physical hardware to the member
 
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
