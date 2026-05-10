@@ -1,0 +1,76 @@
+// src/modules/metrics/metrics.service.ts
+import { Injectable, ForbiddenException, NotFoundException } from '@nestjs/common';
+import { PrismaService } from '../../database/prisma.service';
+import { CreateMetricDto, HealthSyncDto } from './dto/metrics.dto';
+import {InputJsonValue} from "@prisma/client/runtime/client";
+
+@Injectable()
+export class MetricsService {
+    constructor(private readonly prisma: PrismaService) {}
+
+    async logMetric(tenantId: string, userId: string, dto: CreateMetricDto) {
+        // 1. Identify the membership context
+        const targetMembershipId = await this.resolveMembershipId(tenantId, userId, dto.membershipId);
+
+        return this.prisma.metric.create({
+            data: {
+                membershipId: targetMembershipId,
+                metricType: dto.metricType.toUpperCase(),
+                data: dto.data as InputJsonValue,
+            },
+        });
+    }
+
+    async getMetrics(tenantId: string, userId: string, metricType?: string) {
+        const membership = await this.prisma.membership.findUnique({
+            where: { userId_tenantId: { userId, tenantId } },
+        });
+
+        if (!membership) throw new NotFoundException('Membership not found');
+
+        return this.prisma.metric.findMany({
+            where: {
+                membershipId: membership.id,
+                ...(metricType && { metricType: metricType.toUpperCase() }),
+            },
+            orderBy: { recordedAt: 'desc' },
+        });
+    }
+
+    async syncHealthData(tenantId: string, userId: string, dto: HealthSyncDto) {
+        const membership = await this.prisma.membership.findUnique({
+            where: { userId_tenantId: { userId, tenantId } },
+        });
+
+        if (!membership) throw new ForbiddenException('No membership in this tenant');
+
+        // Efficient bulk insert for wearable data
+        const metrics = dto.dataPoints.map((point) => ({
+            membershipId: membership.id,
+            metricType: `WEARABLE_${point.type}`.toUpperCase(),
+            data: { provider: dto.provider, ...point } as InputJsonValue,
+            recordedAt: new Date(point.date),
+        }));
+
+        return this.prisma.metric.createMany({ data: metrics });
+    }
+
+    private async resolveMembershipId(tenantId: string, userId: string, requestedId?: string): Promise<string> {
+        const ownMembership = await this.prisma.membership.findUnique({
+            where: { userId_tenantId: { userId, tenantId } },
+        });
+
+        if (!ownMembership) throw new ForbiddenException('Invalid session context');
+
+        // If a trainer is logging for someone else, verify ID existence in the same tenant
+        if (requestedId && requestedId !== ownMembership.id) {
+            const target = await this.prisma.membership.findUnique({ where: { id: requestedId } });
+            if (!target || target.tenantId !== tenantId) {
+                throw new ForbiddenException('Target member does not belong to this organization');
+            }
+            return requestedId;
+        }
+
+        return ownMembership.id;
+    }
+}
