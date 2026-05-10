@@ -11,6 +11,7 @@ import { TenantMiddleware } from './common/middleware/tenant.middleware';
 import { PrismaModule } from "./database/prisma.module";
 import {TenantsModule} from "./modules/tenants/tenants.module";
 import {MembersModule} from "./modules/members/members.module";
+import {BillingModule} from "./modules/billing/billing.module";
 
 @Module({
     imports: [
@@ -21,6 +22,7 @@ import {MembersModule} from "./modules/members/members.module";
         UsersModule,
         TenantsModule,
         MembersModule,
+        BillingModule,
     ],
 })
 export class AppModule implements NestModule {
