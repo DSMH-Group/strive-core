@@ -315,10 +315,12 @@ enum Role {
 }
 
 enum MembershipStatus {
-  PENDING
-  ACTIVE
-  GRACE_PERIOD
-  SUSPENDED
+  PENDING         // Account created, not paid yet
+  ACTIVE          // Paid member in good standing
+  GRACE_PERIOD    // Subscription elapsed. 3 day grace period
+  SUSPENDED       // Grace period expired, locked out from premises
+  CANCELLED       // User cancels subscription. user can request re-enrolment
+  REVOKED         // Banned by admin from gym for misbehaviour
 
   @@schema("stride")
 }

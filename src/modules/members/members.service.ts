@@ -33,7 +33,7 @@ export class MembersService {
             return this.prisma.membership.update({
                 where: {id: existing.id},
                 data: {
-                    status: MembershipStatus.ACTIVE,
+                    status: MembershipStatus.PENDING,
                     // Only add the role if they don't have it yet
                     roles: !hasRole ? {
                         create: {role: dto.initialRole}
