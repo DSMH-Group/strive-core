@@ -1,21 +1,30 @@
-// src/modules/metrics/metrics.controller.ts
-import { Controller, Get, Post, Body, Query, UseGuards, Headers } from '@nestjs/common';
-import { MetricsService } from './metrics.service';
-import { CreateMetricDto, HealthSyncDto } from './dto/metrics.dto';
-import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
-import { RolesGuard } from '../../common/guards/roles.guard';
-import { Roles } from '../../common/decorators/roles.decorator';
-import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import {Body, Controller, Get, Headers, HttpStatus, Post, Query, UseGuards} from '@nestjs/common';
+import {ApiBearerAuth, ApiOperation, ApiQuery, ApiResponse, ApiTags} from '@nestjs/swagger';
+import {MetricsService} from './metrics.service';
+import {CreateMetricDto, HealthSyncDto} from './dto/metrics.dto';
+import {JwtAuthGuard} from '../../common/guards/jwt-auth.guard';
+import {RolesGuard} from '../../common/guards/roles.guard';
+import {Roles} from '../../common/decorators/roles.decorator';
+import {CurrentUser} from '../../common/decorators/current-user.decorator';
 import {ApiTenantId} from "../../common/decorators/tenant-header.decorator";
 
+@ApiTags('Metrics & Health Tracking')
+@ApiBearerAuth('JWT-auth') // 💡 Tells Swagger this controller requires the Bearer token
 @Controller('metrics')
 @UseGuards(JwtAuthGuard, RolesGuard)
-@ApiTenantId()
+@ApiTenantId() // 💡 Your custom decorator for the header
 export class MetricsController {
-    constructor(private readonly metricsService: MetricsService) {}
+    constructor(private readonly metricsService: MetricsService) {
+    }
 
     @Post()
     @Roles('TRAINER', 'MEMBER')
+    @ApiOperation({
+        summary: 'Log a performance metric',
+        description: 'Allows members to log personal stats (weight, PRs) or trainers to log client stats.'
+    })
+    @ApiResponse({status: HttpStatus.CREATED, description: 'Metric recorded successfully.'})
+    @ApiResponse({status: HttpStatus.FORBIDDEN, description: 'Insufficient permissions or invalid Tenant ID.'})
     async logMetric(
         @Headers('X-Tenant-ID') tenantId: string,
         @CurrentUser('sub') userId: string,
@@ -26,6 +35,17 @@ export class MetricsController {
 
     @Get()
     @Roles('TRAINER', 'MEMBER')
+    @ApiOperation({
+        summary: 'Retrieve metric history',
+        description: 'Fetch time-series data for specific metric types like WEIGHT or ARCHERY_SCORE.'
+    })
+    @ApiQuery({
+        name: 'metricType',
+        required: false,
+        example: 'WEIGHT',
+        description: 'Filter by type of metric'
+    })
+    @ApiResponse({status: HttpStatus.OK, description: 'Returns a list of metrics.'})
     async getMetrics(
         @Headers('X-Tenant-ID') tenantId: string,
         @CurrentUser('sub') userId: string,
@@ -36,6 +56,15 @@ export class MetricsController {
 
     @Post('health/sync')
     @Roles('MEMBER')
+    @ApiOperation({
+        summary: 'Sync wearable health data',
+        description: 'Bulk upload data points from Apple Health or Google Health Connect.'
+    })
+    @ApiResponse({
+        status: HttpStatus.CREATED,
+        description: 'Wearable data synced successfully.',
+        schema: {example: {processed: 150, ignored: 5}}
+    })
     async syncHealth(
         @Headers('X-Tenant-ID') tenantId: string,
         @CurrentUser('sub') userId: string,
