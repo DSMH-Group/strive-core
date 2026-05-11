@@ -45,7 +45,7 @@ export class MembersController {
     }
 
     @Get('me')
-    @Roles('MEMBER')
+    @Roles('MEMBER', 'ORG_ADMIN', 'MANAGER')
     @ApiOperation({ summary: 'Get my specific gym membership' })
     async getMyMembership(
         @Headers('X-Tenant-ID') tenantId: string,
