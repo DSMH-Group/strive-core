@@ -10,7 +10,7 @@ async function bootstrap() {
     // 1. Global API Prefix
     // Aligns with our /api/v1 spec, excluding health checks from the prefix
     app.setGlobalPrefix('api/v1', {
-        exclude: ['health/liveness', 'health/readiness', 'metrics'],
+        exclude: ['health/liveness', 'health/readiness'],
     });
 
     // Configure OpenAPI/Swagger
