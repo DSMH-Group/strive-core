@@ -14,6 +14,7 @@ datasource db {
 // 1. GLOBAL IDENTITY (Platform Level)
 // ------------------------------------------------------
 
+
 model User {
   id         String  @id @default(uuid())
   keycloakId String? @unique // Maps to the JWT 'sub' claim from Keycloak
@@ -32,6 +33,7 @@ model User {
   updatedAt DateTime @updatedAt
 
   @@map("users")
+  @@schema("stride")
 }
 
 // ------------------------------------------------------
@@ -60,6 +62,7 @@ model Tenant {
   updatedAt DateTime @updatedAt
 
   @@map("tenants")
+  @@schema("stride")
 }
 
 // ------------------------------------------------------
@@ -90,6 +93,7 @@ model Membership {
 
   @@unique([userId, tenantId])
   @@map("memberships")
+  @@schema("stride")
 }
 
 model MembershipRole {
@@ -101,6 +105,7 @@ model MembershipRole {
 
   @@unique([membershipId, role])
   @@map("membership_roles")
+  @@schema("stride")
 }
 
 // ------------------------------------------------------
@@ -121,6 +126,7 @@ model Attendance {
   membership Membership? @relation(fields: [membershipId], references: [id], onDelete: Cascade)
 
   @@map("attendances")
+  @@schema("stride")
 }
 
 // ------------------------------------------------------
@@ -148,6 +154,7 @@ model Invoice {
   updatedAt DateTime @updatedAt
 
   @@map("invoices")
+  @@schema("stride")
 }
 
 model InvoiceItem {
@@ -159,6 +166,7 @@ model InvoiceItem {
   invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
 
   @@map("invoice_items")
+  @@schema("stride")
 }
 
 model Payment {
@@ -174,6 +182,7 @@ model Payment {
   processedAt DateTime @default(now())
 
   @@map("payments")
+  @@schema("stride")
 }
 
 // ------------------------------------------------------
@@ -192,6 +201,7 @@ model Resource {
   bookings Booking[]
 
   @@map("resources")
+  @@schema("stride")
 }
 
 model Booking {
@@ -206,6 +216,7 @@ model Booking {
   membership Membership @relation(fields: [membershipId], references: [id], onDelete: Cascade)
 
   @@map("bookings")
+  @@schema("stride")
 }
 
 // ------------------------------------------------------
@@ -224,6 +235,7 @@ model Metric {
   membership Membership @relation(fields: [membershipId], references: [id], onDelete: Cascade)
 
   @@map("metrics")
+  @@schema("stride")
 }
 
 // ------------------------------------------------------
@@ -243,6 +255,7 @@ model Document {
   membership Membership @relation(fields: [membershipId], references: [id], onDelete: Cascade)
 
   @@map("documents")
+  @@schema("stride")
 }
 
 // ------------------------------------------------------
@@ -265,6 +278,7 @@ model AuditLog {
   createdAt DateTime @default(now())
 
   @@map("audit_logs")
+  @@schema("stride")
 }
 
 // ------------------------------------------------------
@@ -276,6 +290,7 @@ enum Role {
   MANAGER
   TRAINER
   MEMBER
+  @@schema("stride")
 }
 
 enum MembershipStatus {
@@ -283,11 +298,13 @@ enum MembershipStatus {
   ACTIVE
   GRACE_PERIOD
   SUSPENDED
+  @@schema("stride")
 }
 
 enum InvoiceType {
   SUBSCRIPTION
   TOKEN
+  @@schema("stride")
 }
 
 enum InvoiceStatus {
@@ -295,6 +312,7 @@ enum InvoiceStatus {
   OPEN
   PAID
   VOID
+  @@schema("stride")
 }
 
 enum PaymentMethod {
@@ -302,15 +320,18 @@ enum PaymentMethod {
   BANK_TRANSFER
   PAYHERE
   DIRECTPAY
+  @@schema("stride")
 }
 
 enum PaymentStatus {
   PENDING
   SUCCESS
   FAILED
+  @@schema("stride")
 }
 
 enum ResourceType {
   PHYSICAL
   HUMAN
+  @@schema("stride")
 }
