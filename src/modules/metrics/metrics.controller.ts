@@ -27,7 +27,7 @@ export class MetricsController {
     @ApiResponse({status: HttpStatus.FORBIDDEN, description: 'Insufficient permissions or invalid Tenant ID.'})
     async logMetric(
         @Headers('X-Tenant-ID') tenantId: string,
-        @CurrentUser('sub') userId: string,
+        @CurrentUser('id') userId: string,
         @Body() dto: CreateMetricDto,
     ) {
         return this.metricsService.logMetric(tenantId, userId, dto);
@@ -48,7 +48,7 @@ export class MetricsController {
     @ApiResponse({status: HttpStatus.OK, description: 'Returns a list of metrics.'})
     async getMetrics(
         @Headers('X-Tenant-ID') tenantId: string,
-        @CurrentUser('sub') userId: string,
+        @CurrentUser('id') userId: string,
         @Query('metricType') metricType?: string,
     ) {
         return this.metricsService.getMetrics(tenantId, userId, metricType);
@@ -67,7 +67,7 @@ export class MetricsController {
     })
     async syncHealth(
         @Headers('X-Tenant-ID') tenantId: string,
-        @CurrentUser('sub') userId: string,
+        @CurrentUser('id') userId: string,
         @Body() dto: HealthSyncDto,
     ) {
         return this.metricsService.syncHealthData(tenantId, userId, dto);

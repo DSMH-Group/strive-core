@@ -18,7 +18,7 @@ export class DocumentsController {
     @Roles('ORG_ADMIN', 'MANAGER', 'TRAINER', 'MEMBER')
     async getUploadUrl(
         @Headers('X-Tenant-ID') tenantId: string,
-        @CurrentUser('sub') userId: string,
+        @CurrentUser('id') userId: string,
         @Body() dto: GetUploadUrlDto,
     ) {
         return this.documentsService.generateUploadUrl(tenantId, userId, dto);
