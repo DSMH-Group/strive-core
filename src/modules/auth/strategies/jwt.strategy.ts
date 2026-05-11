@@ -4,14 +4,16 @@ import { PassportStrategy } from '@nestjs/passport';
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { passportJwtSecret } from 'jwks-rsa';
-import { JwtPayload } from '../../../common/decorators/current-user.decorator';
+import {PrismaService} from "../../../database/prisma.service";
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
-    constructor(configService: ConfigService) {
-        // Construct the Keycloak JWKS URL
-        const keycloakBaseUrl = configService.get<string>('KEYCLOAK_BASE_URL'); // e.g., https://auth.strive.lk
-        const realm = configService.get<string>('KEYCLOAK_REALM'); // e.g., strive-production
+    constructor(
+        configService: ConfigService,
+        private readonly prisma: PrismaService // 💡 INJECT IT HERE
+    ) {
+        const keycloakBaseUrl = configService.get<string>('KEYCLOAK_BASE_URL');
+        const realm = configService.get<string>('KEYCLOAK_REALM');
         const jwksUri = `${keycloakBaseUrl}/realms/${realm}/protocol/openid-connect/certs`;
 
         super({
@@ -22,15 +24,34 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
                 jwksUri: jwksUri,
             }),
             jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
-            // Keycloak signs with RS256 by default
             algorithms: ['RS256'],
-            // We don't pass audience validation here unless strictly configured in Keycloak
             ignoreExpiration: false,
         });
     }
 
-    // Whatever is returned here is injected into req.user
-    async validate(payload: JwtPayload) {
-        return payload;
+    async validate(payload: any) {
+        const { sub, email, given_name, family_name } = payload;
+
+        // 1. Check if user exists in Strive DB
+        let user = await this.prisma.user.findUnique({
+            where: { keycloakId: sub }
+        });
+
+        // 2. If not, "Auto-Provision" (JIT Sync)
+        if (!user) {
+            user = await this.prisma.user.create({
+                data: {
+                    keycloakId: sub,
+                    email: email,
+                    firstName: given_name || '',
+                    lastName: family_name || '',
+                    isActive: true
+                }
+            });
+            console.log(`🚀 New User Auto-Synced from JWT: ${email}`);
+        }
+
+        // 💡 Now 'req.user' contains the full DB user, including our internal 'id' (UUID)
+        return user;
     }
 }

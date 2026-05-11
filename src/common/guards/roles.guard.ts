@@ -2,6 +2,7 @@ import { Injectable, CanActivate, ExecutionContext, ForbiddenException } from '@
 import { Reflector } from '@nestjs/core';
 import { ROLES_KEY } from '../decorators/roles.decorator';
 import { PrismaService } from '../../database/prisma.service';
+import { User } from '@prisma/client';
 
 @Injectable()
 export class RolesGuard implements CanActivate {
@@ -19,51 +20,41 @@ export class RolesGuard implements CanActivate {
         if (!requiredRoles) return true;
 
         const request = context.switchToHttp().getRequest();
-        const user = request.user;
-        const tenantId = (request.headers['x-tenant-id'] as string)?.trim(); // 💡 Trim whitespace
+        const user = request.user as User; // This is the DB User from JwtStrategy
+        const tenantId = (request.headers['x-tenant-id'] as string)?.trim();
 
-        // 💡 THE TRUTH LOGS
-        const keycloakId = user?.sub || user?.keycloakId;
-        console.log('--- ROLES GUARD DEBUG START ---');
-        console.log('1. JWT Keycloak ID (sub):', keycloakId);
-        console.log('2. Header Tenant ID:', tenantId);
-        console.log('3. Required Roles:', requiredRoles);
-
-        if (!keycloakId || !tenantId) {
-            console.error('Missing ID or TenantID in request');
-            throw new ForbiddenException('Missing authentication data.');
+        if (!user || !tenantId) {
+            throw new ForbiddenException('Missing authentication data or Tenant ID.');
         }
 
-        // Check if the user even exists in the DB first
-        const userInDb = await this.prisma.user.findUnique({
-            where: { keycloakId }
-        });
+        console.log('--- ROLES GUARD (OPTIMIZED) ---');
+        console.log(`User: ${user.email} (${user.id})`);
+        console.log(`Tenant: ${tenantId}`);
 
-        if (!userInDb) {
-            console.error(`DATABASE: No user found for KeycloakID: ${keycloakId}`);
-            throw new ForbiddenException('User not found in DB.');
-        }
-        console.log('4. User found in DB:', userInDb.email);
-
-        // Check the membership specifically
-        const membership = await this.prisma.membership.findFirst({
+        // Check the membership using the internal DB ID (faster than string lookup)
+        const membership = await this.prisma.membership.findUnique({
             where: {
-                tenantId: tenantId,
-                user: { keycloakId: keycloakId }
+                userId_tenantId: {
+                    userId: user.id,
+                    tenantId: tenantId
+                }
             },
             include: { roles: true }
         });
 
         if (!membership) {
-            // 💡 THIS IS WHERE IT'S FAILING
-            console.error(`DATABASE: No membership found for User ${userInDb.id} and Tenant ${tenantId}`);
-            throw new ForbiddenException('You do not have an active membership for this gym.');
+            console.error(`Access Denied: No membership for User ${user.id} in Tenant ${tenantId}`);
+            throw new ForbiddenException('You do not have a membership for this gym.');
         }
 
-        console.log('5. Membership Found! Roles:', membership.roles.map(r => r.role));
-        console.log('--- ROLES GUARD DEBUG END ---');
-
         const userRoles = membership.roles.map((r) => r.role);
-        return requiredRoles.some((role) => userRoles.includes(role as any));
+        const hasPermission = requiredRoles.some((role) => userRoles.includes(role as any));
+
+        if (!hasPermission) {
+            console.error(`Access Denied: Required roles ${requiredRoles} not found in ${userRoles}`);
+            throw new ForbiddenException('Insufficient gym permissions.');
+        }
+
+        return true;
     }
 }
