@@ -51,7 +51,7 @@ export class MembersService {
                 tenantId,
                 userId: dto.userId,
                 rfidTag: dto.rfidTag, // Link hardware immediately
-                status: MembershipStatus.ACTIVE,
+                status: MembershipStatus.PENDING,
                 roles: {
                     create: {
                         role: dto.initialRole
