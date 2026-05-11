@@ -15,8 +15,7 @@ export class TenantsController {
     constructor(private readonly tenantsService: TenantsService) {}
 
     @Post()
-    @UseGuards(JwtAuthGuard, RolesGuard)
-    @Roles('SYSTEM_ADMIN') // Only Stride platform admins can provision new gyms
+    @UseGuards(JwtAuthGuard)
     @ApiBearerAuth('JWT-auth')
     @ApiOperation({ summary: 'Provision a new Gym Environment' })
     @ApiResponse({ status: HttpStatus.CREATED, description: 'Tenant created successfully.' })
