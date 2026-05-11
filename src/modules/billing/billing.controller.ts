@@ -1,23 +1,23 @@
 // src/modules/billing/billing.controller.ts
-import { Controller, Get, Post, Body, Headers, UseGuards, Query } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiBearerAuth, ApiHeader } from '@nestjs/swagger';
-import { BillingService } from './billing.service';
-import { CreateInvoiceDto, ManualPaymentDto } from './dto/billing.dto';
-import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
-import { RolesGuard } from '../../common/guards/roles.guard';
-import { Roles } from '../../common/decorators/roles.decorator';
-import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import {Body, Controller, Get, Headers, Post, Query, UseGuards} from '@nestjs/common';
+import {ApiBearerAuth, ApiOperation, ApiTags} from '@nestjs/swagger';
+import {BillingService} from './billing.service';
+import {CreateInvoiceDto, ManualPaymentDto} from './dto/billing.dto';
+import {JwtAuthGuard} from '../../common/guards/jwt-auth.guard';
+import {RolesGuard} from '../../common/guards/roles.guard';
+import {Roles} from '../../common/decorators/roles.decorator';
+import {CurrentUser} from '../../common/decorators/current-user.decorator';
 
 @ApiTags('Billing & Ledger')
 @Controller('billing')
 export class BillingController {
-    constructor(private readonly billingService: BillingService) {}
+    constructor(private readonly billingService: BillingService) {
+    }
 
     @Post('invoices')
     @UseGuards(JwtAuthGuard, RolesGuard)
     @Roles('ORG_ADMIN', 'MANAGER')
     @ApiBearerAuth('JWT-auth')
-    
     async createInvoice(@Headers('X-Tenant-ID') tenantId: string, @Body() dto: CreateInvoiceDto) {
         return this.billingService.createInvoice(tenantId, dto);
     }
@@ -25,7 +25,6 @@ export class BillingController {
     @Get('invoices')
     @UseGuards(JwtAuthGuard)
     @ApiBearerAuth('JWT-auth')
-    
     async getInvoices(
         @Headers('X-Tenant-ID') tenantId: string,
         @CurrentUser() user: any,
@@ -40,7 +39,6 @@ export class BillingController {
     @UseGuards(JwtAuthGuard, RolesGuard)
     @Roles('ORG_ADMIN', 'MANAGER')
     @ApiBearerAuth('JWT-auth')
-    
     async manualPayment(
         @Headers('X-Tenant-ID') tenantId: string,
         @Body() dto: ManualPaymentDto,
@@ -50,7 +48,7 @@ export class BillingController {
     }
 
     @Post('payments/webhook')
-    @ApiOperation({ summary: 'Unauthenticated gateway webhook' })
+    @ApiOperation({summary: 'Unauthenticated gateway webhook'})
     async gatewayWebhook(@Body() payload: any) {
         return this.billingService.handleGatewayWebhook(payload);
     }
