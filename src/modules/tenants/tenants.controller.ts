@@ -38,11 +38,6 @@ export class TenantsController {
     @ApiTenantId()
     @Roles('ORG_ADMIN') // Only the gym owner/admin can change billing keys
     @ApiBearerAuth('JWT-auth')
-    @ApiHeader({
-        name: 'X-Tenant-ID',
-        description: 'The active tenant context (Injected by TenantMiddleware)',
-        required: true,
-    })
     @ApiOperation({ summary: 'Update Config (Tax, Gateway, Theme)' })
     @ApiResponse({ status: HttpStatus.OK, description: 'Tenant configuration updated.' })
     async updateConfig(
