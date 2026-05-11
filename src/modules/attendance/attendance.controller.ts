@@ -6,8 +6,10 @@ import { CreateAttendanceDto, UpdateAttendanceDto, AttendanceQueryDto } from './
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
+import {ApiTenantId} from "../../common/decorators/tenant-header.decorator";
 
 @ApiTags('Attendance & Ingress')
+@ApiTenantId()
 @Controller('attendances')
 export class AttendanceController {
     constructor(private readonly attendanceService: AttendanceService) {}
@@ -16,7 +18,7 @@ export class AttendanceController {
     @UseGuards(JwtAuthGuard, RolesGuard)
     @Roles('ORG_ADMIN', 'MANAGER', 'TRAINER') // Add IoT_DEVICE_TOKEN logic to your Guard
     @ApiBearerAuth('JWT-auth')
-    @ApiHeader({ name: 'X-Tenant-ID', required: true })
+    
     async checkIn(@Headers('X-Tenant-ID') tenantId: string, @Body() dto: CreateAttendanceDto) {
         return this.attendanceService.checkIn(tenantId, dto);
     }
@@ -25,7 +27,7 @@ export class AttendanceController {
     @UseGuards(JwtAuthGuard, RolesGuard)
     @Roles('ORG_ADMIN', 'MANAGER')
     @ApiBearerAuth('JWT-auth')
-    @ApiHeader({ name: 'X-Tenant-ID', required: true })
+    
     async getHistory(
         @Headers('X-Tenant-ID') tenantId: string,
         @Query() query: AttendanceQueryDto
@@ -37,7 +39,7 @@ export class AttendanceController {
     @UseGuards(JwtAuthGuard, RolesGuard)
     @Roles('ORG_ADMIN', 'MANAGER', 'TRAINER')
     @ApiBearerAuth('JWT-auth')
-    @ApiHeader({ name: 'X-Tenant-ID', required: true })
+    
     async checkOut(
         @Param('id') id: string,
         @Headers('X-Tenant-ID') tenantId: string,

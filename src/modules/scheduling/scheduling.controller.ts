@@ -7,10 +7,12 @@ import { CreateBookingDto } from './dto/booking.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
+import {ApiTenantId} from "../../common/decorators/tenant-header.decorator";
 
 @ApiTags('Resources & Scheduling')
 @ApiBearerAuth('JWT-auth')
-@ApiHeader({ name: 'X-Tenant-ID', required: true })
+@ApiTenantId()
+
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('scheduling')
 export class SchedulingController {
@@ -40,7 +42,7 @@ export class SchedulingController {
     async cancelBooking(
         @Headers('X-Tenant-ID') tenantId: string,
         @Param('id') id: string,
-        @Request() req,
+        @Request() req: any,
     ) {
         const user = req.user;
         // Check if user is Staff for the specific tenant

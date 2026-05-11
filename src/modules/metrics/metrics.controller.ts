@@ -6,9 +6,11 @@ import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import {ApiTenantId} from "../../common/decorators/tenant-header.decorator";
 
 @Controller('metrics')
 @UseGuards(JwtAuthGuard, RolesGuard)
+@ApiTenantId()
 export class MetricsController {
     constructor(private readonly metricsService: MetricsService) {}
 

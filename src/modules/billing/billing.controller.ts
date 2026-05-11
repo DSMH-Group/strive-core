@@ -17,7 +17,7 @@ export class BillingController {
     @UseGuards(JwtAuthGuard, RolesGuard)
     @Roles('ORG_ADMIN', 'MANAGER')
     @ApiBearerAuth('JWT-auth')
-    @ApiHeader({ name: 'X-Tenant-ID', required: true })
+    
     async createInvoice(@Headers('X-Tenant-ID') tenantId: string, @Body() dto: CreateInvoiceDto) {
         return this.billingService.createInvoice(tenantId, dto);
     }
@@ -25,7 +25,7 @@ export class BillingController {
     @Get('invoices')
     @UseGuards(JwtAuthGuard)
     @ApiBearerAuth('JWT-auth')
-    @ApiHeader({ name: 'X-Tenant-ID', required: true })
+    
     async getInvoices(
         @Headers('X-Tenant-ID') tenantId: string,
         @CurrentUser() user: any,
@@ -40,7 +40,7 @@ export class BillingController {
     @UseGuards(JwtAuthGuard, RolesGuard)
     @Roles('ORG_ADMIN', 'MANAGER')
     @ApiBearerAuth('JWT-auth')
-    @ApiHeader({ name: 'X-Tenant-ID', required: true })
+    
     async manualPayment(
         @Headers('X-Tenant-ID') tenantId: string,
         @Body() dto: ManualPaymentDto,

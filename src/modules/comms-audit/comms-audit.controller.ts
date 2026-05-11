@@ -5,8 +5,10 @@ import { BroadcastDto } from './dto/broadcast.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
+import {ApiTenantId} from "../../common/decorators/tenant-header.decorator";
 
 @Controller() // Endpoints mapped via table: /api/v1/...
+@ApiTenantId()
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class CommsAuditController {
     constructor(private readonly commsService: CommsAuditService) {}

@@ -7,6 +7,7 @@ import { UpdateTenantDto } from './dto/update-tenant.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
+import {ApiTenantId} from "../../common/decorators/tenant-header.decorator";
 
 @ApiTags('Tenants (B2B Config)')
 @Controller('tenants') // 'api/v1' is handled by the global prefix
@@ -25,6 +26,7 @@ export class TenantsController {
 
     @Get(':tenantId')
     // No Auth Guards here! This is public so Next.js can fetch SSR themes
+    @ApiTenantId()
     @ApiOperation({ summary: 'Get Public Theme Config' })
     @ApiParam({ name: 'tenantId', description: 'UUID of the tenant' })
     @ApiResponse({ status: HttpStatus.OK, description: 'Public tenant data retrieved.' })
@@ -34,6 +36,7 @@ export class TenantsController {
 
     @Patch()
     @UseGuards(JwtAuthGuard, RolesGuard)
+    @ApiTenantId()
     @Roles('ORG_ADMIN') // Only the gym owner/admin can change billing keys
     @ApiBearerAuth('JWT-auth')
     @ApiHeader({
