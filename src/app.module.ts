@@ -52,8 +52,20 @@ export class AppModule implements NestModule {
 
                 // --- SYSTEM & INFRASTRUCTURE ---
                 // Keep these as is, since health/metrics were excluded from the global prefix in main.ts
-                { path: 'health/*path', method: RequestMethod.GET },
-                { path: 'metrics', method: RequestMethod.GET }
+                { path: '/health/*path', method: RequestMethod.GET },
+                { path: '/metrics', method: RequestMethod.GET },
+
+                { path: '/users/webhook', method: RequestMethod.POST },
+                { path: '/users/me', method: RequestMethod.GET },
+                { path: '/users/me', method: RequestMethod.PATCH },
+
+                // --- TENANT PROVISIONING ---
+                { path: '/tenants', method: RequestMethod.POST },
+
+                // --- SYSTEM & INFRASTRUCTURE ---
+                // Keep these as is, since health/metrics were excluded from the global prefix in main.ts
+                { path: '/health/*path', method: RequestMethod.GET },
+                { path: '/metrics', method: RequestMethod.GET }
             )
             .forRoutes({path: '*path', method: RequestMethod.ALL});
     }
