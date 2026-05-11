@@ -19,59 +19,51 @@ export class RolesGuard implements CanActivate {
         if (!requiredRoles) return true;
 
         const request = context.switchToHttp().getRequest();
-        const user = request.user; // This is the decoded JWT payload
-        const tenantId = request.headers['x-tenant-id'] as string;
+        const user = request.user;
+        const tenantId = (request.headers['x-tenant-id'] as string)?.trim(); // 💡 Trim whitespace
 
-        if (!user) {
-            throw new ForbiddenException('User authentication payload not found.');
+        // 💡 THE TRUTH LOGS
+        const keycloakId = user?.sub || user?.keycloakId;
+        console.log('--- ROLES GUARD DEBUG START ---');
+        console.log('1. JWT Keycloak ID (sub):', keycloakId);
+        console.log('2. Header Tenant ID:', tenantId);
+        console.log('3. Required Roles:', requiredRoles);
+
+        if (!keycloakId || !tenantId) {
+            console.error('Missing ID or TenantID in request');
+            throw new ForbiddenException('Missing authentication data.');
         }
 
-        // 💡 THE FIX: Use the 'sub' claim from Keycloak to find the membership
-        // through the User relationship, since we don't have the internal DB UUID yet.
-        const keycloakId = user.sub || user.keycloakId;
-
-        // 1. Check for Global Admin status first
-        // We query the DB here because JWTs can be stale
-        const dbUser = await this.prisma.user.findUnique({
+        // Check if the user even exists in the DB first
+        const userInDb = await this.prisma.user.findUnique({
             where: { keycloakId }
         });
 
-        if (!dbUser) throw new ForbiddenException('User not synchronized in Strive database.');
-        if (dbUser.isGlobalAdmin) return true;
-
-        // 2. Tenant-specific route check
-        if (!tenantId) {
-            throw new ForbiddenException('X-Tenant-ID header is missing for a tenant-scoped resource.');
+        if (!userInDb) {
+            console.error(`DATABASE: No user found for KeycloakID: ${keycloakId}`);
+            throw new ForbiddenException('User not found in DB.');
         }
+        console.log('4. User found in DB:', userInDb.email);
 
-        // 3. Find Membership using the relation
-        // Using findFirst because we are querying via the related user's keycloakId
+        // Check the membership specifically
         const membership = await this.prisma.membership.findFirst({
             where: {
                 tenantId: tenantId,
-                user: {
-                    keycloakId: keycloakId
-                }
+                user: { keycloakId: keycloakId }
             },
-            include: {
-                roles: true,
-            },
+            include: { roles: true }
         });
 
-        if (!membership || membership.status !== 'ACTIVE') {
+        if (!membership) {
+            // 💡 THIS IS WHERE IT'S FAILING
+            console.error(`DATABASE: No membership found for User ${userInDb.id} and Tenant ${tenantId}`);
             throw new ForbiddenException('You do not have an active membership for this gym.');
         }
 
-        // 4. Verify Roles
+        console.log('5. Membership Found! Roles:', membership.roles.map(r => r.role));
+        console.log('--- ROLES GUARD DEBUG END ---');
+
         const userRoles = membership.roles.map((r) => r.role);
-        const hasRole = requiredRoles.some((role) => userRoles.includes(role as any));
-
-        if (!hasRole) {
-            throw new ForbiddenException(
-                `Permission Denied. Required: (${requiredRoles.join(', ')}). Your roles: (${userRoles.join(', ')})`
-            );
-        }
-
-        return true;
+        return requiredRoles.some((role) => userRoles.includes(role as any));
     }
 }
