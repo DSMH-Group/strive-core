@@ -1,5 +1,5 @@
 // src/modules/members/members.controller.ts
-import { Controller, Get, Post, Patch, Body, Param, Headers, Query, UseGuards, HttpStatus } from '@nestjs/common';
+import {Controller, Get, Post, Patch, Body, Param, Headers, Query, UseGuards, HttpStatus, Delete} from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiHeader, ApiQuery } from '@nestjs/swagger';
 import { MembersService } from './members.service';
 import { CreateMembershipDto, UpdateMembershipDto, TransitionMembershipDto } from './dto/members.dto';
@@ -8,7 +8,8 @@ import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { MembershipStatus, Role } from '@prisma/client';
-import {ApiTenantId} from "../../common/decorators/tenant-header.decorator"; // <-- Import strict Prisma Enums
+import {ApiTenantId} from "../../common/decorators/tenant-header.decorator";
+import {CreateInvitationDto} from "./dto/invitations.dto"; // <-- Import strict Prisma Enums
 
 @ApiTags('Memberships & Lifecycle')
 @ApiBearerAuth('JWT-auth')
@@ -86,5 +87,42 @@ export class MembersController {
         @Body() dto: TransitionMembershipDto
     ) {
         return this.membersService.transitionState(tenantId, id, dto);
+    }
+
+    @Post('invites')
+    @Roles('ORG_ADMIN', 'MANAGER')
+    @ApiOperation({ summary: 'Send a gym invitation to a new or existing user' })
+    async inviteUser(
+        @Headers('X-Tenant-ID') tenantId: string,
+        @Body() dto: CreateInvitationDto
+    ) {
+        return this.membersService.inviteUser(tenantId, dto);
+    }
+
+    @Get('invites')
+    @Roles('ORG_ADMIN', 'MANAGER')
+    @ApiOperation({ summary: 'List all pending invitations for the gym' })
+    async getPendingInvites(@Headers('X-Tenant-ID') tenantId: string) {
+        return this.membersService.getPendingInvites(tenantId);
+    }
+
+    @Post('invites/:inviteId/resend')
+    @Roles('ORG_ADMIN', 'MANAGER')
+    @ApiOperation({ summary: 'Resend an invitation notification' })
+    async resendInvite(
+        @Headers('X-Tenant-ID') tenantId: string,
+        @Param('inviteId') inviteId: string
+    ) {
+        return this.membersService.resendInvite(tenantId, inviteId);
+    }
+
+    @Delete('invites/:inviteId')
+    @Roles('ORG_ADMIN', 'MANAGER')
+    @ApiOperation({ summary: 'Revoke a pending invitation' })
+    async revokeInvite(
+        @Headers('X-Tenant-ID') tenantId: string,
+        @Param('inviteId') inviteId: string
+    ) {
+        return this.membersService.revokeInvite(tenantId, inviteId);
     }
 }

@@ -14,7 +14,6 @@ datasource db {
 // 1. GLOBAL IDENTITY (Platform Level)
 // ------------------------------------------------------
 
-
 model User {
   id         String  @id @default(uuid())
   keycloakId String? @unique // Maps to the JWT 'sub' claim from Keycloak
@@ -58,8 +57,9 @@ model Tenant {
   resources   Resource[]
   auditLogs   AuditLog[]
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  tenantInvitations TenantInvitation[]
 
   @@map("tenants")
   @@schema("stride")
@@ -281,6 +281,26 @@ model AuditLog {
   @@schema("stride")
 }
 
+model TenantInvitation {
+  id        String           @id @default(uuid())
+  tenantId  String
+  email     String?
+  phone     String? // Enforced +94 format via class-validator in the DTO
+  role      Role // e.g., MEMBER, TRAINER, MANAGER
+  status    InvitationStatus @default(PENDING)
+  expiresAt DateTime
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Indexes are critical here for the auto-linker query performance
+  @@index([email])
+  @@index([phone])
+  @@schema("stride")
+}
+
 // ------------------------------------------------------
 // ENUMS
 // ------------------------------------------------------
@@ -290,6 +310,7 @@ enum Role {
   MANAGER
   TRAINER
   MEMBER
+
   @@schema("stride")
 }
 
@@ -298,12 +319,14 @@ enum MembershipStatus {
   ACTIVE
   GRACE_PERIOD
   SUSPENDED
+
   @@schema("stride")
 }
 
 enum InvoiceType {
   SUBSCRIPTION
   TOKEN
+
   @@schema("stride")
 }
 
@@ -312,6 +335,7 @@ enum InvoiceStatus {
   OPEN
   PAID
   VOID
+
   @@schema("stride")
 }
 
@@ -320,6 +344,7 @@ enum PaymentMethod {
   BANK_TRANSFER
   PAYHERE
   DIRECTPAY
+
   @@schema("stride")
 }
 
@@ -327,11 +352,22 @@ enum PaymentStatus {
   PENDING
   SUCCESS
   FAILED
+
   @@schema("stride")
 }
 
 enum ResourceType {
   PHYSICAL
   HUMAN
+
+  @@schema("stride")
+}
+
+enum InvitationStatus {
+  PENDING
+  CLAIMED
+  REVOKED
+  EXPIRED
+
   @@schema("stride")
 }
