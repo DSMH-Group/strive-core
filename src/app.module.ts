@@ -43,19 +43,17 @@ export class AppModule implements NestModule {
             .apply(TenantMiddleware)
             .exclude(
                 // --- GLOBAL IDENTITY ---
-                // Webhook to sync Keycloak user (Basic Auth, no tenant)
-                {path: 'api/v1/users/webhook', method: RequestMethod.POST},
-                // Fetching/Updating Global Profile (JWT Auth, no tenant)
-                {path: 'api/v1/users/me', method: RequestMethod.GET},
-                {path: 'api/v1/users/me', method: RequestMethod.PATCH},
+                { path: 'users/webhook', method: RequestMethod.POST },
+                { path: 'users/me', method: RequestMethod.GET },
+                { path: 'users/me', method: RequestMethod.PATCH },
 
                 // --- TENANT PROVISIONING ---
-                // Creating a new gym environment (JWT Auth, no tenant yet)
-                {path: 'api/v1/tenants', method: RequestMethod.POST},
+                { path: 'tenants', method: RequestMethod.POST },
 
                 // --- SYSTEM & INFRASTRUCTURE ---
-                {path: 'health/*path', method: RequestMethod.GET},
-                {path: 'metrics', method: RequestMethod.GET}
+                // Keep these as is, since health/metrics were excluded from the global prefix in main.ts
+                { path: 'health/*path', method: RequestMethod.GET },
+                { path: 'metrics', method: RequestMethod.GET }
             )
             .forRoutes({path: '*path', method: RequestMethod.ALL});
     }
