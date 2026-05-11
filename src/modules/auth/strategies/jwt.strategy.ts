@@ -10,7 +10,7 @@ import { JwtPayload } from '../../../common/decorators/current-user.decorator';
 export class JwtStrategy extends PassportStrategy(Strategy) {
     constructor(configService: ConfigService) {
         // Construct the Keycloak JWKS URL
-        const keycloakBaseUrl = configService.get<string>('KEYCLOAK_URL'); // e.g., https://auth.strive.lk
+        const keycloakBaseUrl = configService.get<string>('KEYCLOAK_BASE_URL'); // e.g., https://auth.strive.lk
         const realm = configService.get<string>('KEYCLOAK_REALM'); // e.g., strive-production
         const jwksUri = `${keycloakBaseUrl}/realms/${realm}/protocol/openid-connect/certs`;
 
