@@ -12,7 +12,7 @@ export class SystemController {
         return this.systemService.getBasicHealth();
     }
 
-    @Get('api/v1/meta/resolve')
+    @Get('meta/resolve')
     async resolve(@Query() query: ResolveTenantDto, @Headers('x-internal-secret') secret: string) {
         // Simple infrastructure-level security
         if (secret !== process.env.INTERNAL_MIDDLEWARE_SECRET) {
