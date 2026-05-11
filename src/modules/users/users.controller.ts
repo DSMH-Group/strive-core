@@ -1,18 +1,19 @@
 // src/modules/users/users.controller.ts
-import { Controller, Get, Post, Patch, Body, UseGuards, HttpStatus } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiHeader } from '@nestjs/swagger';
-import { UsersService } from './users.service';
-import { SyncUserWebhookDto } from './dto/sync-user.dto';
-import { UpdateUserDto } from './dto/update-user.dto';
-import { UserResponseDto } from './dto/user-response.dto';
-import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
-import { BasicAuthGuard } from '../../common/guards/basic-auth.guard';
-import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import {Body, Controller, Get, HttpStatus, Patch, Post, UseGuards} from '@nestjs/common';
+import {ApiBearerAuth, ApiOperation, ApiResponse, ApiTags} from '@nestjs/swagger';
+import {UsersService} from './users.service';
+import {SyncUserWebhookDto} from './dto/sync-user.dto';
+import {UpdateUserDto} from './dto/update-user.dto';
+import {UserResponseDto} from './dto/user-response.dto';
+import {JwtAuthGuard} from '../../common/guards/jwt-auth.guard';
+import {BasicAuthGuard} from '../../common/guards/basic-auth.guard';
+import {CurrentUser} from '../../common/decorators/current-user.decorator';
 
 @ApiTags('Users & Identity')
 @Controller('users')
 export class UsersController {
-    constructor(private readonly usersService: UsersService) {}
+    constructor(private readonly usersService: UsersService) {
+    }
 
     @Post('webhook')
     @UseGuards(BasicAuthGuard)
@@ -20,17 +21,17 @@ export class UsersController {
         summary: 'Sync User Profile',
         description: 'Keycloak webhook to upsert global user identity.'
     })
-    @ApiResponse({ status: HttpStatus.CREATED, description: 'User synced successfully.' })
-    @ApiResponse({ status: HttpStatus.UNAUTHORIZED, description: 'Basic Auth failure.' })
+    @ApiResponse({status: HttpStatus.CREATED, description: 'User synced successfully.'})
+    @ApiResponse({status: HttpStatus.UNAUTHORIZED, description: 'Basic Auth failure.'})
     async handleKeycloakWebhook(@Body() dto: SyncUserWebhookDto) {
         const user = await this.usersService.syncKeycloakUser(dto);
-        return { success: true, userId: user.id };
+        return {success: true, userId: user.id};
     }
 
     @Get('me')
     @UseGuards(JwtAuthGuard)
     @ApiBearerAuth('JWT-auth')
-    @ApiOperation({ summary: 'Get Current Profile' })
+    @ApiOperation({summary: 'Get Current Profile'})
     @ApiResponse({
         status: HttpStatus.OK,
         description: 'Returns the global identity profile.',
@@ -43,8 +44,8 @@ export class UsersController {
     @Patch('me')
     @UseGuards(JwtAuthGuard)
     @ApiBearerAuth('JWT-auth')
-    @ApiOperation({ summary: 'Update Current Profile' })
-    @ApiResponse({ status: HttpStatus.OK, description: 'Profile updated successfully.' })
+    @ApiOperation({summary: 'Update Current Profile'})
+    @ApiResponse({status: HttpStatus.OK, description: 'Profile updated successfully.'})
     async updateMe(
         @CurrentUser() user: any,
         @Body() dto: UpdateUserDto,

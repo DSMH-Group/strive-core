@@ -30,14 +30,6 @@ async function bootstrap() {
             },
             'JWT-auth', // This is the security name we will reference in controllers
         )
-        // Define our custom multi-tenant header globally
-        .addGlobalParameters({
-            name: 'X-Tenant-ID',
-            in: 'header',
-            required: false, // Set to true if EVERY route requires it
-            description: 'The unique identifier for the gym/organization',
-            schema: { type: 'string' },
-        })
         .build();
 
     const document = SwaggerModule.createDocument(app, config);
