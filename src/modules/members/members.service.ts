@@ -9,24 +9,45 @@ export class MembersService {
     constructor(private readonly prisma: PrismaService) {}
 
     async createMembership(tenantId: string, dto: CreateMembershipDto) {
+        // 1. Ensure the Global User exists
         const user = await this.prisma.user.findUnique({ where: { id: dto.userId } });
         if (!user) throw new NotFoundException('Global user not found.');
 
-        // FIX 1: Correct compound key order based on @@unique([userId, tenantId])
+        // 2. Check for existing membership
         const existing = await this.prisma.membership.findUnique({
             where: {
                 userId_tenantId: { userId: dto.userId, tenantId }
-            }
+            },
+            include: { roles: true }
         });
 
-        if (existing) throw new ConflictException('User is already a member of this tenant.');
+        if (existing) {
+            // 💡 LOGIC: If they exist, we "Upgrade" them instead of failing.
+            // Check if they already have the role we are trying to add.
+            const hasRole = existing.roles.some(r => r.role === dto.initialRole);
 
+            return this.prisma.membership.update({
+                where: { id: existing.id },
+                data: {
+                    status: MembershipStatus.ACTIVE,
+                    // Only add the role if they don't have it yet
+                    roles: !hasRole ? {
+                        create: { role: dto.initialRole }
+                    } : undefined,
+                    // If an RFID tag was provided in the DTO, link it now
+                    ...(dto.rfidTag && { rfidTag: dto.rfidTag })
+                },
+                include: { user: true, roles: true }
+            });
+        }
+
+        // 3. Brand New Member Flow (No existing membership)
         return this.prisma.membership.create({
             data: {
                 tenantId,
                 userId: dto.userId,
+                rfidTag: dto.rfidTag, // Link hardware immediately
                 status: MembershipStatus.ACTIVE,
-                // FIX 2: Nested write for the one-to-many roles relationship
                 roles: {
                     create: {
                         role: dto.initialRole
@@ -35,7 +56,7 @@ export class MembersService {
             },
             include: {
                 user: true,
-                roles: true // Include roles in the response
+                roles: true
             }
         });
     }
