@@ -20,7 +20,7 @@ export class AttendanceController {
     @ApiBearerAuth('JWT-auth')
     
     async checkIn(@Headers('X-Tenant-ID') tenantId: string, @Body() dto: CreateAttendanceDto) {
-        return this.attendanceService.checkIn(tenantId, dto);
+        return this.attendanceService.checkIn(dto);
     }
 
     @Get()
@@ -32,7 +32,7 @@ export class AttendanceController {
         @Headers('X-Tenant-ID') tenantId: string,
         @Query() query: AttendanceQueryDto
     ) {
-        return this.attendanceService.getHistory(tenantId, query.startDate, query.endDate);
+        return this.attendanceService.getHistory(query.startDate, query.endDate);
     }
 
     @Patch(':id')
@@ -45,6 +45,6 @@ export class AttendanceController {
         @Headers('X-Tenant-ID') tenantId: string,
         @Body() dto: UpdateAttendanceDto
     ) {
-        return this.attendanceService.checkOut(id, tenantId, dto);
+        return this.attendanceService.checkOut(id, dto);
     }
 }
