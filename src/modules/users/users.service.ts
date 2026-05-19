@@ -1,27 +1,31 @@
 // src/modules/users/users.service.ts
-import { Injectable, NotFoundException, InternalServerErrorException, Logger } from '@nestjs/common';
-import { SyncUserWebhookDto } from './dto/sync-user.dto';
-import { UpdateUserDto } from './dto/update-user.dto';
-import { PrismaService } from '../../database/prisma.service';
+import {BadRequestException, Injectable, InternalServerErrorException, Logger, NotFoundException} from '@nestjs/common';
+import {SyncUserWebhookDto} from './dto/sync-user.dto';
+import {UpdateUserDto} from './dto/update-user.dto';
+import {PrismaService} from '../../database/prisma.service';
 import {InvitationStatus, MembershipStatus} from "@prisma/client";
 
 @Injectable()
 export class UsersService {
     private readonly logger = new Logger(UsersService.name);
 
-    constructor(private readonly prisma: PrismaService) {}
+    constructor(private readonly prisma: PrismaService) {
+    }
 
     /**
      * Called by the Keycloak Webhook SPI when a user registers.
      * Upserts the global identity profile AND auto-links pending gym invitations.
      */
     async syncKeycloakUser(dto: SyncUserWebhookDto) {
+        if (!dto.keycloakId) {
+            throw new BadRequestException('Sync payload is missing a valid Keycloak ID reference.');
+        }
+
         try {
-            // We MUST use a transaction here to ensure data integrity between the user and the gym.
             return await this.prisma.$transaction(async (tx) => {
                 // 1. Upsert the Global User Profile
                 const user = await tx.user.upsert({
-                    where: { keycloakId: dto.keycloakId },
+                    where: {keycloakId: dto.keycloakId},
                     update: {
                         email: dto.email,
                         firstName: dto.firstName,
@@ -42,17 +46,21 @@ export class UsersService {
                     where: {
                         status: InvitationStatus.PENDING,
                         OR: [
-                            { email: user.email },
-                            { phone: user.phone ? user.phone : undefined }
-                        ].filter(condition => Object.values(condition)[0] !== null)
+                            {email: user.email},
+                            ...(user.phone ? [{phone: user.phone}] : [])
+                        ]
                     }
                 });
 
                 // 3. Claim invites and generate memberships
                 if (pendingInvites.length > 0) {
                     for (const invite of pendingInvites) {
-                        const existingMembership = await tx.membership.findUnique({
-                            where: { userId_tenantId: { userId: user.id, tenantId: invite.tenantId } }
+                        // Use findFirst if standard compound index syntax varies across deployment schemas
+                        const existingMembership = await tx.membership.findFirst({
+                            where: {
+                                userId: user.id,
+                                tenantId: invite.tenantId
+                            }
                         });
 
                         if (!existingMembership) {
@@ -62,7 +70,7 @@ export class UsersService {
                                     userId: user.id,
                                     status: MembershipStatus.ACTIVE,
                                     roles: {
-                                        create: { role: invite.role }
+                                        create: {role: invite.role}
                                     }
                                 }
                             });
@@ -70,8 +78,8 @@ export class UsersService {
 
                         // Mark the invitation as claimed
                         await tx.tenantInvitation.update({
-                            where: { id: invite.id },
-                            data: { status: InvitationStatus.CLAIMED }
+                            where: {id: invite.id},
+                            data: {status: InvitationStatus.CLAIMED}
                         });
 
                         this.logger.log(`Auto-linked user ${user.id} to tenant ${invite.tenantId}`);
@@ -87,40 +95,75 @@ export class UsersService {
     }
 
     /**
-     * Fetch the user by their Keycloak JWT 'sub' claim.
-     * Includes tenant memberships for immediate frontend routing.
+     * Fetch the user by handling incoming guard user contexts safely.
+     * Prevents PrismaClientValidationError by intercepting extraction failures early.
      */
-    async getMe(keycloakId: string) {
-        const user = await this.prisma.user.findUnique({
-            where: { keycloakId },
-            // Eager load memberships to power the multi-tenant UI instantly
+    async getMe(userContextPayload: any) {
+        // Intercept both raw string parameters and full request user object shapes
+        const keycloakId = typeof userContextPayload === 'string'
+            ? userContextPayload
+            : userContextPayload?.keycloakId || userContextPayload?.sub || userContextPayload?.id;
+
+        if (!keycloakId) {
+            this.logger.error('UsersController called getMe but user parameter yielded undefined.');
+            throw new BadRequestException('Missing or unresolvable Keycloak identity footprint string.');
+        }
+
+        const user = await this.prisma.user.findFirst({
+            where: {
+                OR: [
+                    {keycloakId: keycloakId},
+                    {id: keycloakId}
+                ]
+            },
             include: {
                 memberships: {
-                    include: { tenant: true }
+                    include: {tenant: true}
                 }
             },
         });
 
         if (!user) {
-            this.logger.warn(`Orphaned JWT token detected for Keycloak ID: ${keycloakId}`);
-            throw new NotFoundException('User profile not found in Strive DB');
+            this.logger.warn(`Orphaned identity pointer lookup detected for credential hash: ${keycloakId}`);
+            throw new NotFoundException('User profile footprint not mapped inside Strive DB ledger.');
         }
 
         return user;
     }
 
     /**
-     * Update Strive profile details.
+     * Update Strive profile details safely.
      */
-    async updateMe(keycloakId: string, dto: UpdateUserDto) {
+    async updateMe(userContextPayload: any, dto: UpdateUserDto) {
+        const keycloakId = typeof userContextPayload === 'string'
+            ? userContextPayload
+            : userContextPayload?.keycloakId || userContextPayload?.sub || userContextPayload?.id;
+
+        if (!keycloakId) {
+            throw new BadRequestException('Cannot apply configuration updates without a secure identification footprint.');
+        }
+
         try {
+            // Find the database record first to ensure accurate primary identity keying
+            const existingUser = await this.prisma.user.findFirst({
+                where: {
+                    OR: [
+                        {keycloakId: keycloakId},
+                        {id: keycloakId}
+                    ]
+                }
+            });
+
+            if (!existingUser) throw new NotFoundException('Target user matching identity matrix not found.');
+
             return await this.prisma.user.update({
-                where: { keycloakId },
+                where: {id: existingUser.id},
                 data: dto,
             });
         } catch (error) {
+            if (error instanceof NotFoundException) throw error;
             this.logger.error(`Failed to update user profile: ${keycloakId}`, error.stack);
-            throw new InternalServerErrorException('Profile update failed.');
+            throw new InternalServerErrorException('Profile update execution parameter fault.');
         }
     }
 }

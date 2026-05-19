@@ -17,31 +17,30 @@ export class TenantsService {
 
     /**
      * Public discovery engine allowing users to find partner spaces.
+     * Optionally resolves membership statuses if an active Keycloak access token is forwarded.
      */
-    async exploreTenants(filters: { search?: string; vertical?: string }) {
+    async exploreTenants(filters: { search?: string; vertical?: string }, token?: string) {
         const {search, vertical} = filters;
 
-        // Build a dynamic query condition array
+        // 1. Build a dynamic query condition array
         const whereConditions: Prisma.TenantWhereInput[] = [];
 
         if (search) {
             whereConditions.push({
                 OR: [
                     {name: {contains: search, mode: 'insensitive'}},
-                    // If you decide to store a physical address text field inside tenant or config:
                     {slug: {contains: this.generateSlug(search), mode: 'insensitive'}}
                 ]
             });
         }
 
         if (vertical && vertical !== 'All') {
-            // Because vertical configuration maps cleanly to your frontend taxonomy,
-            // we can match against partial text or properties depending on schemas.
             whereConditions.push({
                 name: {contains: vertical, mode: 'insensitive'}
             });
         }
 
+        // 2. Fetch matching tenants from the ledger database
         const tenants = await this.prisma.tenant.findMany({
             where: whereConditions.length > 0 ? {AND: whereConditions} : {},
             select: {
@@ -49,22 +48,59 @@ export class TenantsService {
                 name: true,
                 domain: true,
                 themeConfig: true,
-                // Avoid extracting secureGatewayKeys or taxRules here to maintain absolute data safety!
             },
-            take: 20 // Sensible default limit to protect performance on 4G networks
+            take: 20
         });
 
-        // Map database entities to output structure matching our frontend TenantDirectoryItem interface
+        // 3. User Membership Resolution Layer
+        let userMemberships: Array<{ tenantId: string; status: string }> = [];
+
+        if (token) {
+            try {
+                // Decode or verify token payload claims to capture the user's Keycloak ID
+                // In a standard JWT, the unique sub claim maps to Keycloak's identifier
+                const jwt = require('jsonwebtoken');
+                const decoded = jwt.decode(token);
+                const keycloakId = decoded?.sub || decoded?.keycloakId;
+
+                if (keycloakId) {
+                    const userWithMemberships = await this.prisma.user.findFirst({
+                        where: {keycloakId},
+                        select: {
+                            memberships: {
+                                select: {
+                                    tenantId: true,
+                                    status: true
+                                }
+                            }
+                        }
+                    });
+                    if (userWithMemberships) {
+                        userMemberships = userWithMemberships.memberships;
+                    }
+                }
+            } catch (error) {
+                this.logger.warn('Token context present but failed parsing or resolution checks.', error.stack);
+                // Non-blocking catch so unauthenticated or expired users can still browse public listings cleanly
+            }
+        }
+
+        // 4. Map database records to look exactly like our frontend's TenantDirectoryItem contract
         return tenants.map(tenant => {
             const config = (tenant.themeConfig || {}) as any;
+
+            // Match live user membership status parameters
+            const userMembership = userMemberships.find(m => m.tenantId === tenant.id);
+            const resolvedMembershipStatus = userMembership ? userMembership.status : "NONE";
+
             return {
                 id: tenant.id,
                 name: tenant.name,
                 subdomain: tenant.domain,
-                // Fallback to high performance if no specific type is initialized yet
                 vertical: config.vertical || "High Performance",
                 location: config.location || "Sri Lanka",
-                accentColor: config.primaryColor ? `from-[${config.primaryColor}]/20 to-zinc-900` : "from-orange-600/20 to-amber-600/10"
+                accentColor: config.primaryColor ? `from-[${config.primaryColor}]/20 to-zinc-900` : "from-orange-600/20 to-amber-600/10",
+                membershipStatus: resolvedMembershipStatus // 👈 This wires live statuses straight to the UI!
             };
         });
     }
