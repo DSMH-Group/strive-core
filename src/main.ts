@@ -1,7 +1,7 @@
 // src/main.ts
-import { NestFactory } from '@nestjs/core';
-import { ValidationPipe } from '@nestjs/common';
-import { AppModule } from './app.module';
+import {NestFactory} from '@nestjs/core';
+import {ValidationPipe} from '@nestjs/common';
+import {AppModule} from './app.module';
 import {DocumentBuilder, SwaggerModule} from "@nestjs/swagger";
 
 async function bootstrap() {
@@ -35,7 +35,7 @@ async function bootstrap() {
     const document = SwaggerModule.createDocument(app, config);
 
     // Expose the Swagger UI at the /api-docs endpoint
-    SwaggerModule.setup('api-docs', app, document, {
+    SwaggerModule.setup('docs', app, document, {
         swaggerOptions: {
             persistAuthorization: true, // Keeps you logged in during hot reloads!
         },

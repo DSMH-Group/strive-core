@@ -61,6 +61,7 @@ export class AppModule implements NestModule {
 
                 // --- TENANT PROVISIONING ---
                 { path: '/tenants', method: RequestMethod.POST },
+                {path: '/tenants', method: RequestMethod.GET},
 
                 // --- SYSTEM & INFRASTRUCTURE ---
                 // Keep these as is, since health/metrics were excluded from the global prefix in main.ts
