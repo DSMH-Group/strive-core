@@ -16,6 +16,60 @@ export class TenantsService {
     }
 
     /**
+     * Public discovery engine allowing users to find partner spaces.
+     */
+    async exploreTenants(filters: { search?: string; vertical?: string }) {
+        const {search, vertical} = filters;
+
+        // Build a dynamic query condition array
+        const whereConditions: Prisma.TenantWhereInput[] = [];
+
+        if (search) {
+            whereConditions.push({
+                OR: [
+                    {name: {contains: search, mode: 'insensitive'}},
+                    // If you decide to store a physical address text field inside tenant or config:
+                    {slug: {contains: this.generateSlug(search), mode: 'insensitive'}}
+                ]
+            });
+        }
+
+        if (vertical && vertical !== 'All') {
+            // Because vertical configuration maps cleanly to your frontend taxonomy,
+            // we can match against partial text or properties depending on schemas.
+            whereConditions.push({
+                name: {contains: vertical, mode: 'insensitive'}
+            });
+        }
+
+        const tenants = await this.prisma.tenant.findMany({
+            where: whereConditions.length > 0 ? {AND: whereConditions} : {},
+            select: {
+                id: true,
+                name: true,
+                domain: true,
+                themeConfig: true,
+                // Avoid extracting secureGatewayKeys or taxRules here to maintain absolute data safety!
+            },
+            take: 20 // Sensible default limit to protect performance on 4G networks
+        });
+
+        // Map database entities to output structure matching our frontend TenantDirectoryItem interface
+        return tenants.map(tenant => {
+            const config = (tenant.themeConfig || {}) as any;
+            return {
+                id: tenant.id,
+                name: tenant.name,
+                subdomain: tenant.domain,
+                // Fallback to high performance if no specific type is initialized yet
+                vertical: config.vertical || "High Performance",
+                location: config.location || "Sri Lanka",
+                accentColor: config.primaryColor ? `from-[${config.primaryColor}]/20 to-zinc-900` : "from-orange-600/20 to-amber-600/10"
+            };
+        });
+    }
+
+    /**
      * Utility to generate a clean, URL-safe slug from the Gym Name
      */
     private generateSlug(name: string): string {

@@ -9,9 +9,15 @@ import { ConflictException, NotFoundException } from '@nestjs/common';
 const mockPrismaService = {
     tenant: {
         findUnique: jest.fn(),
+        findFirst: jest.fn(), // Added to match service logic
+        findMany: jest.fn(),  // Added for exploration endpoint
         create: jest.fn(),
         update: jest.fn(),
     },
+    $transaction: jest.fn((cb) => cb(mockPrismaService)), // Mock transaction pass-through
+    membership: {
+        create: jest.fn()
+    }
 };
 
 // 2. Mock the Encryption Service
@@ -49,8 +55,8 @@ describe('TenantsService', () => {
 
     describe('createTenant', () => {
         it('should create a tenant with auto-generated slug', async () => {
-            // Setup: Database returns null (meaning domain and slug are available)
-            prisma.tenant.findUnique.mockResolvedValue(null);
+            // FIX: Set findFirst to return null instead of findUnique
+            prisma.tenant.findFirst.mockResolvedValue(null);
 
             const mockCreatedTenant = { id: 'uuid-1', name: 'Power World', domain: 'powerworld', slug: 'power-world' };
             prisma.tenant.create.mockResolvedValue(mockCreatedTenant);
@@ -61,18 +67,37 @@ describe('TenantsService', () => {
                 ownerId: 'owner-uuid'
             });
 
-            expect(prisma.tenant.findUnique).toHaveBeenCalledTimes(2); // Checks domain, then checks slug
-            expect(prisma.tenant.create).toHaveBeenCalled();
+            expect(prisma.tenant.findFirst).toHaveBeenCalledTimes(1);
             expect(result).toEqual(mockCreatedTenant);
         });
 
         it('should throw ConflictException if domain is taken', async () => {
-            // Setup: Database returns an existing tenant
-            prisma.tenant.findUnique.mockResolvedValue({ id: 'uuid-2' });
+            // FIX: Use findFirst
+            prisma.tenant.findFirst.mockResolvedValue({ id: 'uuid-2', domain: 'powerworld' });
 
             await expect(
                 service.createTenant({ name: 'Power World', subdomain: 'powerworld', ownerId: 'owner-uuid' })
             ).rejects.toThrow(ConflictException);
+        });
+    });
+
+    describe('exploreTenants', () => {
+        it('should fetch and map active tenants cleanly', async () => {
+            const mockDbTenants = [
+                { id: 't-1', name: 'TASS Colombo', domain: 'tass', themeConfig: { vertical: 'CrossFit', location: 'Colombo 07' } }
+            ];
+            prisma.tenant.findMany.mockResolvedValue(mockDbTenants);
+
+            const result = await service.exploreTenants({ search: 'TASS' });
+
+            expect(prisma.tenant.findMany).toHaveBeenCalled();
+            expect(result[0]).toEqual(expect.objectContaining({
+                id: 't-1',
+                name: 'TASS Colombo',
+                subdomain: 'tass',
+                vertical: 'CrossFit',
+                location: 'Colombo 07'
+            }));
         });
     });
 

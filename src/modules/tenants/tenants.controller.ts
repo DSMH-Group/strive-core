@@ -1,6 +1,6 @@
 // src/modules/tenants/tenants.controller.ts
-import { Controller, Get, Post, Patch, Body, Param, Headers, UseGuards, HttpStatus } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiHeader, ApiParam } from '@nestjs/swagger';
+import {Controller, Get, Post, Patch, Body, Param, Headers, UseGuards, HttpStatus, Query} from '@nestjs/common';
+import {ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiHeader, ApiParam, ApiQuery} from '@nestjs/swagger';
 import { TenantsService } from './tenants.service';
 import { CreateTenantDto } from './dto/create-tenant.dto';
 import { UpdateTenantDto } from './dto/update-tenant.dto';
@@ -13,6 +13,18 @@ import {ApiTenantId} from "../../common/decorators/tenant-header.decorator";
 @Controller('tenants') // 'api/v1' is handled by the global prefix
 export class TenantsController {
     constructor(private readonly tenantsService: TenantsService) {}
+
+    @Get()
+    @ApiOperation({ summary: 'Explore and search all partner spaces' })
+    @ApiQuery({ name: 'search', required: false, type: String, description: 'Search by gym name or location' })
+    @ApiQuery({ name: 'vertical', required: false, type: String, description: 'Filter by fitness vertical/category' })
+    @ApiResponse({ status: HttpStatus.OK, description: 'List of matching partner spaces returned.' })
+    async exploreTenants(
+        @Query('search') search?: string,
+        @Query('vertical') vertical?: string,
+    ) {
+        return this.tenantsService.exploreTenants({ search, vertical });
+    }
 
     @Post()
     @UseGuards(JwtAuthGuard)
