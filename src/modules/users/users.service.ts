@@ -98,37 +98,15 @@ export class UsersService {
      * Fetch the user by handling incoming guard user contexts safely.
      * Prevents PrismaClientValidationError by intercepting extraction failures early.
      */
-    async getMe(userContextPayload: any) {
-        // Intercept both raw string parameters and full request user object shapes
-        const keycloakId = typeof userContextPayload === 'string'
-            ? userContextPayload
-            : userContextPayload?.keycloakId || userContextPayload?.sub || userContextPayload?.id;
-
-        if (!keycloakId) {
-            this.logger.error('UsersController called getMe but user parameter yielded undefined.');
-            throw new BadRequestException('Missing or unresolvable Keycloak identity footprint string.');
-        }
-
-        const user = await this.prisma.user.findFirst({
-            where: {
-                OR: [
-                    {keycloakId: keycloakId},
-                    {id: keycloakId}
-                ]
-            },
+    async getMe(internalUserId: string) {
+        return this.prisma.user.findUnique({
+            where: {id: internalUserId}, // Use your internal UUID
             include: {
                 memberships: {
                     include: {tenant: true}
                 }
-            },
+            }
         });
-
-        if (!user) {
-            this.logger.warn(`Orphaned identity pointer lookup detected for credential hash: ${keycloakId}`);
-            throw new NotFoundException('User profile footprint not mapped inside Strive DB ledger.');
-        }
-
-        return user;
     }
 
     /**
