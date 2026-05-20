@@ -1,8 +1,8 @@
-import { Injectable, CanActivate, ExecutionContext, ForbiddenException } from '@nestjs/common';
-import { Reflector } from '@nestjs/core';
-import { ROLES_KEY } from '../decorators/roles.decorator';
-import { PrismaService } from '../../database/prisma.service';
-import { User } from '@prisma/client';
+import {CanActivate, ExecutionContext, ForbiddenException, Injectable} from '@nestjs/common';
+import {Reflector} from '@nestjs/core';
+import {ROLES_KEY} from '../decorators/roles.decorator';
+import {PrismaService} from '../../database/prisma.service';
+import {User} from '@prisma/client';
 
 @Injectable()
 export class RolesGuard implements CanActivate {
@@ -46,6 +46,8 @@ export class RolesGuard implements CanActivate {
             console.error(`Access Denied: No membership for User ${user.id} in Tenant ${tenantId}`);
             throw new ForbiddenException('You do not have a membership for this gym.');
         }
+
+        request.membership = membership;
 
         const userRoles = membership.roles.map((r) => r.role);
         const hasPermission = requiredRoles.some((role) => userRoles.includes(role as any));
