@@ -15,17 +15,21 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
         const keycloakBaseUrl = configService.get<string>('KEYCLOAK_BASE_URL');
         const realm = configService.get<string>('KEYCLOAK_REALM');
         const jwksUri = `${keycloakBaseUrl}/realms/${realm}/protocol/openid-connect/certs`;
+        console.log("--- DEBUG: JWKS URI being used ---", jwksUri);
 
         super({
             secretOrKeyProvider: passportJwtSecret({
                 cache: true,
                 rateLimit: true,
                 jwksRequestsPerMinute: 5,
-                jwksUri: jwksUri,
+                jwksUri: `${configService.get('KEYCLOAK_BASE_URL')}/realms/${configService.get('KEYCLOAK_REALM')}/protocol/openid-connect/certs`,
             }),
             jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
+            // 1. Explicitly set the expected issuer
+            issuer: `${configService.get('KEYCLOAK_BASE_URL')}/realms/${configService.get('KEYCLOAK_REALM')}`,
+            // 2. Explicitly set the expected audience
+            audience: 'strive-api',
             algorithms: ['RS256'],
-            ignoreExpiration: false,
         });
     }
 
