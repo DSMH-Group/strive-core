@@ -1,9 +1,9 @@
 // src/modules/auth/strategies/jwt.strategy.ts
-import { ExtractJwt, Strategy } from 'passport-jwt';
-import { PassportStrategy } from '@nestjs/passport';
-import { Injectable } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
-import { passportJwtSecret } from 'jwks-rsa';
+import {ExtractJwt, Strategy} from 'passport-jwt';
+import {PassportStrategy} from '@nestjs/passport';
+import {Injectable} from '@nestjs/common';
+import {ConfigService} from '@nestjs/config';
+import {passportJwtSecret} from 'jwks-rsa';
 import {PrismaService} from "../../../database/prisma.service";
 
 @Injectable()
@@ -30,6 +30,9 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     }
 
     async validate(payload: any) {
+        console.log("--- PASSPORT JWT STRATEGY: Received Payload ---");
+        console.log("Payload:", JSON.stringify(payload, null, 2));
+
         const { sub, email, given_name, family_name } = payload;
 
         // 1. Check if user exists in Strive DB
