@@ -53,10 +53,15 @@ async function bootstrap() {
     // 3. CORS Configuration
     // This is essential for the Next.js App Router and Client Components
     app.enableCors({
-        // In production, this should be an array of allowed whitelabel domains
-        origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+        origin: (origin, callback) => {
+            // Allow if origin matches your base domain or any of the tenant subdomains
+            if (!origin || origin.endsWith('.dsmhgroup.com') || origin === 'http://localhost:3000' || origin === process.env.NEXT_PUBLIC_BASE_URL) {
+                callback(null, true);
+            } else {
+                callback(new Error('Not allowed by CORS'));
+            }
+        },
         credentials: true,
-        // We MUST explicitly allow our custom multi-tenant header
         allowedHeaders: ['Content-Type', 'Authorization', 'X-Tenant-ID'],
     });
 

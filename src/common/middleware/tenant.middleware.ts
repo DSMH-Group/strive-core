@@ -1,6 +1,6 @@
 // src/common/middleware/tenant.middleware.ts
-import { Injectable, NestMiddleware, BadRequestException } from '@nestjs/common';
-import { Request, Response, NextFunction } from 'express';
+import {Injectable, NestMiddleware} from '@nestjs/common';
+import {NextFunction, Request, Response} from 'express';
 
 // Extend the Express Request interface to include our tenantId
 export interface TenantRequest extends Request {
@@ -10,16 +10,12 @@ export interface TenantRequest extends Request {
 @Injectable()
 export class TenantMiddleware implements NestMiddleware {
     use(req: TenantRequest, res: Response, next: NextFunction) {
-        // We typically expect the Next.js frontend to pass this header
+        // Just extract the header if it exists.
+        // Let the Guard or Controller logic enforce presence if needed.
         const tenantId = req.headers['x-tenant-id'] as string;
-
-        if (!tenantId) {
-            // Reject requests that don't specify which gym they are trying to access
-            throw new BadRequestException('Tenant ID is missing from headers.');
+        if (tenantId) {
+            req.tenantId = tenantId;
         }
-
-        // Attach it to the request so your Controllers and Services can use it
-        req.tenantId = tenantId;
         next();
     }
 }
