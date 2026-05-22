@@ -38,9 +38,7 @@ export class UsersController {
         type: UserResponseDto
     })
     async getMe(@CurrentUser() user: any) {
-        // 'user' is already your internal database User record from the JWT strategy!
-        // Just return it directly. No need for getMe(user.id).
-        return user;
+        return this.usersService.getMe(user.id);
     }
 
     @Patch('me')

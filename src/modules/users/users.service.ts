@@ -100,10 +100,13 @@ export class UsersService {
      */
     async getMe(internalUserId: string) {
         return this.prisma.user.findUnique({
-            where: {id: internalUserId}, // Use your internal UUID
+            where: {id: internalUserId},
             include: {
                 memberships: {
-                    include: {tenant: true}
+                    include: {
+                        tenant: true,  // Pulls the gym metadata (slug, name, domain)
+                        roles: true,   // Pulls the assigned permission scopes (ORG_ADMIN, MEMBER, etc.)
+                    }
                 }
             }
         });
