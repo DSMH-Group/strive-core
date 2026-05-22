@@ -29,7 +29,7 @@ export class SessionAuthGuard implements CanActivate {
 
         // 3. Match against your pristine authSession database table records
         const session = await this.prisma.authSession.findUnique({
-            where: {token: token},
+            where: {id: token},
             include: {user: true},
         });
 
