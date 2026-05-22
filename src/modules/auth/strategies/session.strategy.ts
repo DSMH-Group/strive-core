@@ -1,6 +1,6 @@
 import {Injectable, UnauthorizedException} from '@nestjs/common';
 import {PassportStrategy} from '@nestjs/passport';
-import {BasicStrategy as Strategy} from 'passport-http';
+import {Strategy} from 'passport-http-bearer';
 import {PrismaService} from '../../../database/prisma.service';
 
 @Injectable()
