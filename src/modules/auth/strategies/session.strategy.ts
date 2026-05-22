@@ -1,52 +1,29 @@
-// src/common/guards/session-auth.guard.ts
-import {CanActivate, ExecutionContext, Injectable, UnauthorizedException} from '@nestjs/common';
-import {PrismaService} from '../../../database/prisma.service'; // Adjust path if needed
+import {Injectable, UnauthorizedException} from '@nestjs/common';
+import {PassportStrategy} from '@nestjs/passport';
+import {Strategy} from 'passport-http-bearer';
+import {PrismaService} from '../../../database/prisma.service';
 
 @Injectable()
-export class SessionAuthGuard implements CanActivate {
+export class SessionStrategy extends PassportStrategy(Strategy, 'bearer') {
     constructor(private prisma: PrismaService) {
+        super();
     }
 
-    async canActivate(context: ExecutionContext): Promise<boolean> {
-        const request = context.switchToHttp().getRequest();
-        const authHeader = request.headers.authorization;
-
-        // 1. Sniff out the Authorization Header
-        if (!authHeader || !authHeader.startsWith('Bearer ')) {
-            console.error('[SessionAuthGuard] Missing or malformed Authorization header');
-            throw new UnauthorizedException('Missing or invalid session token');
-        }
-
-        // 2. Safely parse and URL-decode the incoming session token string
-        let token = authHeader.split(' ')[1];
-        try {
-            token = decodeURIComponent(token);
-        } catch (e) {
-            console.error('[SessionAuthGuard] Failed to decode token string');
-        }
-
-        console.log('[SessionAuthGuard] Processing Token Lookup:', token);
-
-        // 3. Match against your pristine authSession database table records
+    async validate(token: string) {
+        // 1. Look up the session in the 'auth' schema
         const session = await this.prisma.authSession.findUnique({
-            where: {token: token},
+            where: {token},
             include: {user: true},
         });
 
-        if (!session) {
-            console.error('[SessionAuthGuard] Database miss: No session found matching token');
-            throw new UnauthorizedException('Missing or invalid session token');
+        if (!session || new Date(session.expiresAt) < new Date()) {
+            throw new UnauthorizedException('Invalid or expired session');
         }
 
-        if (new Date(session.expiresAt) < new Date()) {
-            console.error('[SessionAuthGuard] Token expired. Expiry:', session.expiresAt);
-            throw new UnauthorizedException('Missing or invalid session token');
-        }
-
-        // 4. Run your exact same cross-schema data sync logic directly here!
-        console.log('[SessionAuthGuard] Session valid. Syncing user profile:', session.userId);
+        // 2. Sync to 'stride' schema user record (Auto-provisioning)
+        // This maintains the bridge between better-auth and your domain models
         const strideUser = await this.prisma.user.upsert({
-            where: {id: session.userId},
+            where: {id: session.userId}, // Assuming session.userId maps to user.id
             update: {},
             create: {
                 id: session.userId,
@@ -56,8 +33,6 @@ export class SessionAuthGuard implements CanActivate {
             },
         });
 
-        // 5. Populate request.user natively
-        request.user = strideUser;
-        return true;
+        return strideUser; // This populates request.user
     }
 }
