@@ -8,16 +8,16 @@ datasource db {
 }
 
 model User {
-  id            String      @id @default(uuid())
-  keycloakId    String?     @unique
-  email         String      @unique
-  phone         String?     @unique
+  id            String   @id @default(uuid())
+  keycloakId    String?  @unique
+  email         String   @unique
+  phone         String?  @unique
   firstName     String
   lastName      String
-  isGlobalAdmin Boolean     @default(false)
-  isActive      Boolean     @default(true)
-  createdAt     DateTime    @default(now())
-  updatedAt     DateTime    @updatedAt
+  isGlobalAdmin Boolean  @default(false)
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
   auditLogs     AuditLog[]
   memberships   Membership[]
 
@@ -146,7 +146,7 @@ model Resource {
   capacity       Int          @default(1)
   linkedMemberId String?
   bookings       Booking[]
-  tenant         Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@map("resources")
   @@schema("stride")
@@ -227,10 +227,10 @@ model AuthUser {
   id            String        @id
   name          String
   email         String        @unique(map: "user_email_unique")
-  emailVerified Boolean       @map("email_verified")
+  emailVerified Boolean  @default(false) @map("email_verified")
   image         String?
-  createdAt     DateTime      @map("created_at")
-  updatedAt     DateTime      @map("updated_at")
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt     DateTime @default(now()) @map("updated_at") @db.Timestamp(6)
   keycloak_id   String?
   accounts      AuthAccount[]
   sessions      AuthSession[]
@@ -241,10 +241,10 @@ model AuthUser {
 
 model AuthSession {
   id        String   @id
-  expiresAt DateTime @map("expires_at")
+  expiresAt DateTime @map("expires_at") @db.Timestamp(6)
   token     String   @unique(map: "session_token_unique")
-  createdAt DateTime @map("created_at")
-  updatedAt DateTime @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt DateTime @default(now()) @map("updated_at") @db.Timestamp(6)
   ipAddress String?  @map("ip_address")
   userAgent String?  @map("user_agent")
   userId    String   @map("user_id")
@@ -263,12 +263,12 @@ model AuthAccount {
   accessToken           String?   @map("access_token")
   refreshToken          String?   @map("refresh_token")
   idToken               String?   @map("id_token")
-  accessTokenExpiresAt  DateTime? @map("access_token_expires_at")
-  refreshTokenExpiresAt DateTime? @map("refresh_token_expires_at")
+  accessTokenExpiresAt  DateTime? @map("access_token_expires_at") @db.Timestamp(6)
+  refreshTokenExpiresAt DateTime? @map("refresh_token_expires_at") @db.Timestamp(6)
   scope                 String?
   password              String?
-  createdAt             DateTime  @map("created_at")
-  updatedAt             DateTime  @map("updated_at")
+  createdAt             DateTime  @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt             DateTime  @default(now()) @map("updated_at") @db.Timestamp(6)
   user                  AuthUser  @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "account_user_id_user_id_fk")
 
   @@index([userId])
