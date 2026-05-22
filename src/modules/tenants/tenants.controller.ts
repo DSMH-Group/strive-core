@@ -32,7 +32,7 @@ export class TenantsController {
 
     @Post()
     @UseGuards(SessionAuthGuard)
-    @ApiBearerAuth('JWT-auth')
+    @ApiBearerAuth('Bearer-auth')
     @ApiOperation({summary: 'Provision a new Gym Environment'})
     @ApiResponse({status: HttpStatus.CREATED, description: 'Tenant created successfully.'})
     async createTenant(@Body() dto: CreateTenantDto) {
@@ -53,7 +53,7 @@ export class TenantsController {
     @UseGuards(SessionAuthGuard, RolesGuard)
     @ApiTenantId()
     @Roles('ORG_ADMIN') // Only the gym owner/admin can change billing keys
-    @ApiBearerAuth('JWT-auth')
+    @ApiBearerAuth('Bearer-auth')
     @ApiOperation({summary: 'Update Config (Tax, Gateway, Theme)'})
     @ApiResponse({status: HttpStatus.OK, description: 'Tenant configuration updated.'})
     async updateConfig(

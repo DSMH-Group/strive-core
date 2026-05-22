@@ -17,34 +17,34 @@ export class BillingController {
     @Post('invoices')
     @UseGuards(SessionAuthGuard, RolesGuard)
     @Roles('ORG_ADMIN', 'MANAGER')
-    @ApiBearerAuth('JWT-auth')
+    @ApiBearerAuth('Bearer-auth')
     async createInvoice(@Headers('X-Tenant-ID') tenantId: string, @Body() dto: CreateInvoiceDto) {
         return this.billingService.createInvoice(tenantId, dto);
     }
 
     @Get('invoices')
     @UseGuards(SessionAuthGuard)
-    @ApiBearerAuth('JWT-auth')
+    @ApiBearerAuth('Bearer-auth')
     async getInvoices(
         @Headers('X-Tenant-ID') tenantId: string,
         @CurrentUser() user: any,
         @Query('membershipId') membershipId?: string
     ) {
         // MEMBERS can only see their own invoices
-        const targetId = user.globalRole !== 'SYSTEM_ADMIN' && !user.tenantRoles?.[tenantId] ? user.sub : membershipId;
+        const targetId = user.globalRole !== 'SYSTEM_ADMIN' && !user.tenantRoles?.[tenantId] ? user.id : membershipId;
         return this.billingService.getInvoices(tenantId, targetId);
     }
 
     @Post('payments/manual')
     @UseGuards(SessionAuthGuard, RolesGuard)
     @Roles('ORG_ADMIN', 'MANAGER')
-    @ApiBearerAuth('JWT-auth')
+    @ApiBearerAuth('Bearer-auth')
     async manualPayment(
         @Headers('X-Tenant-ID') tenantId: string,
         @Body() dto: ManualPaymentDto,
         @CurrentUser() user: any
     ) {
-        return this.billingService.processManualPayment(tenantId, dto, user.sub);
+        return this.billingService.processManualPayment(tenantId, dto, user.id);
     }
 
     @Post('payments/webhook')

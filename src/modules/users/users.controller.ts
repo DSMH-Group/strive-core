@@ -30,7 +30,7 @@ export class UsersController {
 
     @Get('me')
     @UseGuards(SessionAuthGuard)
-    @ApiBearerAuth('JWT-auth')
+    @ApiBearerAuth('Bearer-auth')
     @ApiOperation({summary: 'Get Current Profile'})
     @ApiResponse({
         status: HttpStatus.OK,
@@ -39,19 +39,19 @@ export class UsersController {
     })
     async getMe(@CurrentUser() user: any) {
         // 'user' is already your internal database User record from the JWT strategy!
-        // Just return it directly. No need for getMe(user.sub).
+        // Just return it directly. No need for getMe(user.id).
         return user;
     }
 
     @Patch('me')
     @UseGuards(SessionAuthGuard)
-    @ApiBearerAuth('JWT-auth')
+    @ApiBearerAuth('Bearer-auth')
     @ApiOperation({summary: 'Update Current Profile'})
     @ApiResponse({status: HttpStatus.OK, description: 'Profile updated successfully.'})
     async updateMe(
         @CurrentUser() user: any,
         @Body() dto: UpdateUserDto,
     ) {
-        return this.usersService.updateMe(user.sub, dto);
+        return this.usersService.updateMe(user.id, dto);
     }
 }

@@ -12,7 +12,7 @@ import {MembershipStatus, Role} from '@prisma/client';
 import {ApiTenantId} from '../../common/decorators/tenant-header.decorator';
 
 @ApiTags('Memberships & Lifecycle')
-@ApiBearerAuth('JWT-auth')
+@ApiBearerAuth('Bearer-auth')
 @ApiTenantId() // Ensure this applies @ApiHeader({ name: 'X-Tenant-ID' }) under the hood
 @UseGuards(SessionAuthGuard, RolesGuard)
 @Controller('members')
@@ -59,7 +59,7 @@ export class MembersController {
         @Headers('X-Tenant-ID') tenantId: string,
         @CurrentUser() currentUser: any
     ) {
-        return this.membersService.getMyMembership(tenantId, currentUser.sub);
+        return this.membersService.getMyMembership(tenantId, currentUser.id);
     }
 
     @Post('invites')

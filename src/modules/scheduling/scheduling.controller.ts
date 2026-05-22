@@ -10,7 +10,7 @@ import {Roles} from '../../common/decorators/roles.decorator';
 import {ApiTenantId} from "../../common/decorators/tenant-header.decorator";
 
 @ApiTags('Resources & Scheduling')
-@ApiBearerAuth('JWT-auth')
+@ApiBearerAuth('Bearer-auth')
 @ApiTenantId()
 
 @UseGuards(SessionAuthGuard, RolesGuard)
@@ -47,6 +47,6 @@ export class SchedulingController {
         const user = req.user;
         // Check if user is Staff for the specific tenant
         const isStaff = ['ORG_ADMIN', 'MANAGER', 'TRAINER'].includes(user.tenantRoles?.[tenantId]);
-        return this.schedulingService.cancelBooking(tenantId, id, user.sub, isStaff);
+        return this.schedulingService.cancelBooking(tenantId, id, user.id, isStaff);
     }
 }

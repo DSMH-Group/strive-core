@@ -17,7 +17,7 @@ export class AttendanceController {
     @Post()
     @UseGuards(SessionAuthGuard, RolesGuard)
     @Roles('ORG_ADMIN', 'MANAGER', 'TRAINER') // Add IoT_DEVICE_TOKEN logic to your Guard
-    @ApiBearerAuth('JWT-auth')
+    @ApiBearerAuth('Bearer-auth')
     
     async checkIn(@Headers('X-Tenant-ID') tenantId: string, @Body() dto: CreateAttendanceDto) {
         return this.attendanceService.checkIn(dto);
@@ -26,7 +26,7 @@ export class AttendanceController {
     @Get()
     @UseGuards(SessionAuthGuard, RolesGuard)
     @Roles('ORG_ADMIN', 'MANAGER')
-    @ApiBearerAuth('JWT-auth')
+    @ApiBearerAuth('Bearer-auth')
     
     async getHistory(
         @Headers('X-Tenant-ID') tenantId: string,
@@ -38,7 +38,7 @@ export class AttendanceController {
     @Patch(':id')
     @UseGuards(SessionAuthGuard, RolesGuard)
     @Roles('ORG_ADMIN', 'MANAGER', 'TRAINER')
-    @ApiBearerAuth('JWT-auth')
+    @ApiBearerAuth('Bearer-auth')
     
     async checkOut(
         @Param('id') id: string,

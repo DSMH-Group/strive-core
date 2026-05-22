@@ -1,7 +1,7 @@
 // src/modules/members/dto/members.dto.ts
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import {ApiProperty, ApiPropertyOptional} from '@nestjs/swagger';
 import {IsEnum, IsNotEmpty, IsOptional, IsString, IsUUID} from 'class-validator';
-import { Role, MembershipStatus } from '@prisma/client'; // <-- Import directly from Prisma
+import {MembershipStatus, Role} from '@prisma/client'; // <-- Import directly from Prisma
 
 export class CreateMembershipDto {
     @ApiProperty({ example: 'uuid-from-global-users-table' })
@@ -17,7 +17,7 @@ export class CreateMembershipDto {
     @ApiProperty( { example: 'RFID-2344' })
     @IsString()
     @IsOptional()
-    rfidTag: string;
+    rfidTag?: string;
 }
 
 export class UpdateMembershipDto {

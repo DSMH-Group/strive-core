@@ -18,17 +18,17 @@ async function bootstrap() {
         .setTitle('Strive Core Engine API')
         .setDescription('The headless backend for the Strive multi-tenant fitness platform.')
         .setVersion('1.0')
-        // Define the global Keycloak JWT Auth
+        // Updated: Now accepts Bearer Session Tokens
         .addBearerAuth(
             {
                 type: 'http',
                 scheme: 'bearer',
-                bearerFormat: 'JWT',
-                name: 'JWT',
-                description: 'Enter Keycloak JWT token',
+                bearerFormat: 'Bearer', // Changed from JWT to Bearer
+                name: 'Authorization',
+                description: 'Enter your session token (e.g., from your auth cookie)',
                 in: 'header',
             },
-            'JWT-auth', // This is the security name we will reference in controllers
+            'Bearer-auth',
         )
         .build();
 
@@ -55,7 +55,7 @@ async function bootstrap() {
     app.enableCors({
         origin: (origin, callback) => {
             // Allow if origin matches your base domain or any of the tenant subdomains
-            if (!origin || origin.endsWith('.dsmhgroup.com') || origin === 'http://localhost:3000' || origin === process.env.NEXT_PUBLIC_BASE_URL) {
+            if (!origin || origin.endsWith('.dsmhgroup.com') || origin === 'http://localhost:3000' || origin === process.env.NEXT_PUBLIC_BASE_URL || origin === 'http://localhost:3001') {
                 callback(null, true);
             } else {
                 callback(new Error('Not allowed by CORS'));

@@ -1,95 +1,67 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
   provider = "postgresql"
-  schemas = ["stride", "auth"] // <-- Point to both!
+  schemas = ["auth", "stride"]
 }
 
-// ------------------------------------------------------
-// 1. GLOBAL IDENTITY (Platform Level)
-// ------------------------------------------------------
-
 model User {
-  id         String  @id @default(uuid())
-  keycloakId String? @unique // Maps to the JWT 'sub' claim from Keycloak
-  email      String  @unique
-  phone      String? @unique // Crucial for SL market (SMS OTP via Text.lk)
-  firstName  String
-  lastName   String
-
-  isGlobalAdmin Boolean @default(false)
-  isActive      Boolean @default(true)
-
-  memberships Membership[]
-  auditLogs   AuditLog[] // Tracks actions performed by this user globally
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id            String      @id @default(uuid())
+  keycloakId    String?     @unique
+  email         String      @unique
+  phone         String?     @unique
+  firstName     String
+  lastName      String
+  isGlobalAdmin Boolean     @default(false)
+  isActive      Boolean     @default(true)
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  auditLogs     AuditLog[]
+  memberships   Membership[]
 
   @@map("users")
   @@schema("stride")
 }
 
-// ------------------------------------------------------
-// 2. TENANCY (B2B Configuration)
-// ------------------------------------------------------
-
 model Tenant {
-  id     String  @id @default(uuid())
-  name   String
-  slug   String  @unique
-  domain String? @unique
-
-  // B2B Configs (JSONB allows flexible structures)
-  themeConfig Json? // CSS variables, logo URLs
-  taxRules    Json? // VAT, SSCL percentages
-  gatewayKeys Json? // Encrypted PayHere/DirectPay Merchant IDs
-
-  // Domain Relations (The Horizontal Isolation boundary)
-  memberships Membership[]
-  attendances Attendance[]
-  invoices    Invoice[]
-  resources   Resource[]
-  auditLogs   AuditLog[]
-
+  id                String             @id @default(uuid())
+  name              String
+  slug              String             @unique
+  domain            String?            @unique
+  themeConfig       Json?
+  taxRules          Json?
+  gatewayKeys       Json?
   createdAt         DateTime           @default(now())
   updatedAt         DateTime           @updatedAt
   tenantInvitations TenantInvitation[]
+  attendances       Attendance[]
+  auditLogs         AuditLog[]
+  invoices          Invoice[]
+  memberships       Membership[]
+  resources         Resource[]
 
   @@map("tenants")
   @@schema("stride")
 }
 
-// ------------------------------------------------------
-// 3. MEMBERSHIP & RBAC (The Intersection)
-// ------------------------------------------------------
-
 model Membership {
-  id       String           @id @default(uuid())
-  userId   String
-  tenantId String
-  status   MembershipStatus @default(ACTIVE)
-  rfidTag  String?          @unique // <-- Add this to link physical hardware to the member
-
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-
-  roles MembershipRole[]
-
-  // Domain Relations (The Vertical Isolation boundary)
+  id        String           @id @default(uuid())
+  userId    String
+  tenantId  String
+  status    MembershipStatus @default(ACTIVE)
+  rfidTag   String?          @unique
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
   attendances Attendance[]
-  invoices    Invoice[]
   bookings    Booking[]
-  metrics     Metric[]
   documents   Document[]
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  invoices  Invoice[]
+  roles     MembershipRole[]
+  tenant    Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  metrics   Metric[]
 
   @@unique([userId, tenantId])
   @@map("memberships")
@@ -97,10 +69,9 @@ model Membership {
 }
 
 model MembershipRole {
-  id           String @id @default(uuid())
+  id         String     @id @default(uuid())
   membershipId String
   role         Role
-
   membership Membership @relation(fields: [membershipId], references: [id], onDelete: Cascade)
 
   @@unique([membershipId, role])
@@ -108,50 +79,35 @@ model MembershipRole {
   @@schema("stride")
 }
 
-// ------------------------------------------------------
-// 4. ATTENDANCE & INGRESS
-// ------------------------------------------------------
-
 model Attendance {
-  id           String  @id @default(uuid())
+  id           String      @id @default(uuid())
   tenantId     String
-  membershipId String? // Nullable in case of raw RFID scans before user linking
+  membershipId String?
   rfidTag      String?
-  authMethod   String // e.g., 'RFID', 'QR', 'MANUAL'
-
-  checkInTime  DateTime  @default(now())
-  checkOutTime DateTime? // For duration calculations
-
-  tenant     Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  membership Membership? @relation(fields: [membershipId], references: [id], onDelete: Cascade)
+  authMethod   String
+  checkInTime  DateTime    @default(now())
+  checkOutTime DateTime?
+  membership   Membership? @relation(fields: [membershipId], references: [id], onDelete: Cascade)
+  tenant       Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@map("attendances")
   @@schema("stride")
 }
 
-// ------------------------------------------------------
-// 5. BILLING & LEDGER
-// ------------------------------------------------------
-
 model Invoice {
-  id           String @id @default(uuid())
+  id          String        @id @default(uuid())
   tenantId     String
   membershipId String
-
-  type   InvoiceType // SUBSCRIPTION or TOKEN
-  status InvoiceStatus @default(DRAFT)
-
-  totalAmount Decimal   @db.Decimal(10, 2) // Always use Decimal for LKR
+  type        InvoiceType
+  status      InvoiceStatus @default(DRAFT)
+  totalAmount Decimal       @db.Decimal(10, 2)
   dueDate     DateTime?
-
-  tenant     Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  membership Membership @relation(fields: [membershipId], references: [id], onDelete: Cascade)
-
-  payments Payment[]
-  items    InvoiceItem[]
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  items       InvoiceItem[]
+  membership  Membership    @relation(fields: [membershipId], references: [id], onDelete: Cascade)
+  tenant      Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  payments    Payment[]
 
   @@map("invoices")
   @@schema("stride")
@@ -162,7 +118,6 @@ model InvoiceItem {
   invoiceId   String
   description String
   amount      Decimal @db.Decimal(10, 2)
-
   invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
 
   @@map("invoice_items")
@@ -173,109 +128,79 @@ model Payment {
   id          String        @id @default(uuid())
   invoiceId   String
   amount      Decimal       @db.Decimal(10, 2)
-  method      PaymentMethod // CASH, BANK_TRANSFER, PAYHERE
-  gatewayTxId String?       @unique // ID from PayHere/DirectPay
+  method      PaymentMethod
+  gatewayTxId String?       @unique
   status      PaymentStatus @default(PENDING)
-
-  invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
-
-  processedAt DateTime @default(now())
+  processedAt DateTime      @default(now())
+  invoice     Invoice       @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
 
   @@map("payments")
   @@schema("stride")
 }
 
-// ------------------------------------------------------
-// 6. RESOURCES & SCHEDULING
-// ------------------------------------------------------
-
 model Resource {
   id             String       @id @default(uuid())
   tenantId       String
   name           String
-  type           ResourceType // PHYSICAL or HUMAN
+  type           ResourceType
   capacity       Int          @default(1)
-  linkedMemberId String? // For Trainer scheduling
-
-  tenant   Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  bookings Booking[]
+  linkedMemberId String?
+  bookings       Booking[]
+  tenant         Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@map("resources")
   @@schema("stride")
 }
 
 model Booking {
-  id           String @id @default(uuid())
+  id         String     @id @default(uuid())
   resourceId   String
   membershipId String
-
-  startTime DateTime
-  endTime   DateTime
-
-  resource   Resource   @relation(fields: [resourceId], references: [id], onDelete: Cascade)
+  startTime  DateTime
+  endTime    DateTime
   membership Membership @relation(fields: [membershipId], references: [id], onDelete: Cascade)
+  resource   Resource   @relation(fields: [resourceId], references: [id], onDelete: Cascade)
 
   @@map("bookings")
   @@schema("stride")
 }
 
-// ------------------------------------------------------
-// 7. EXTENSIBLE METRICS & HEALTH
-// ------------------------------------------------------
-
 model Metric {
-  id           String @id @default(uuid())
+  id         String     @id @default(uuid())
   membershipId String
-
-  metricType String // e.g., 'WEIGHT', 'ARCHERY_SCORE', 'STEPS'
-  data       Json // The flexible payload
-
-  recordedAt DateTime @default(now())
-
+  metricType String
+  data       Json
+  recordedAt DateTime   @default(now())
   membership Membership @relation(fields: [membershipId], references: [id], onDelete: Cascade)
 
   @@map("metrics")
   @@schema("stride")
 }
 
-// ------------------------------------------------------
-// 8. STORAGE & DOCUMENTS
-// ------------------------------------------------------
-
 model Document {
-  id           String @id @default(uuid())
+  id         String     @id @default(uuid())
   membershipId String
-
-  fileName String
-  fileUrl  String // S3 bucket path
-  context  String // e.g., 'WAIVER', 'AVATAR', 'MEDICAL'
-
-  uploadedAt DateTime @default(now())
-
+  fileName   String
+  fileUrl    String
+  context    String
+  uploadedAt DateTime   @default(now())
   membership Membership @relation(fields: [membershipId], references: [id], onDelete: Cascade)
 
   @@map("documents")
   @@schema("stride")
 }
 
-// ------------------------------------------------------
-// 9. AUDITING (Immutable Logs)
-// ------------------------------------------------------
-
 model AuditLog {
-  id       String  @id @default(uuid())
-  tenantId String
-  userId   String? // The Global User who performed the action
-
-  action   String // e.g., 'MEMBER_STATUS_CHANGED', 'INVOICE_PAID'
-  entity   String // The table affected
-  entityId String // The ID of the affected record
-  changes  Json? // Diff of what changed
-
-  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  user   User?  @relation(fields: [userId], references: [id], onDelete: SetNull)
-
+  id        String   @id @default(uuid())
+  tenantId  String
+  userId    String?
+  action    String
+  entity    String
+  entityId  String
+  changes   Json?
   createdAt DateTime @default(now())
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user      User?    @relation(fields: [userId], references: [id])
 
   @@map("audit_logs")
   @@schema("stride")
@@ -285,25 +210,84 @@ model TenantInvitation {
   id        String           @id @default(uuid())
   tenantId  String
   email     String?
-  phone     String? // Enforced +94 format via class-validator in the DTO
-  role      Role // e.g., MEMBER, TRAINER, MANAGER
+  phone     String?
+  role      Role
   status    InvitationStatus @default(PENDING)
   expiresAt DateTime
-
-  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
-  // Indexes are critical here for the auto-linker query performance
   @@index([email])
   @@index([phone])
   @@schema("stride")
 }
 
-// ------------------------------------------------------
-// ENUMS
-// ------------------------------------------------------
+model AuthUser {
+  id            String        @id
+  name          String
+  email         String        @unique(map: "user_email_unique")
+  emailVerified Boolean       @map("email_verified")
+  image         String?
+  createdAt     DateTime      @map("created_at")
+  updatedAt     DateTime      @map("updated_at")
+  keycloak_id   String?
+  accounts      AuthAccount[]
+  sessions      AuthSession[]
+
+  @@map("user")
+  @@schema("auth")
+}
+
+model AuthSession {
+  id        String   @id
+  expiresAt DateTime @map("expires_at")
+  token     String   @unique(map: "session_token_unique")
+  createdAt DateTime @map("created_at")
+  updatedAt DateTime @map("updated_at")
+  ipAddress String?  @map("ip_address")
+  userAgent String?  @map("user_agent")
+  userId    String   @map("user_id")
+  user      AuthUser @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "session_user_id_user_id_fk")
+
+  @@index([userId])
+  @@map("session")
+  @@schema("auth")
+}
+
+model AuthAccount {
+  id                    String    @id
+  accountId             String    @map("account_id")
+  providerId            String    @map("provider_id")
+  userId                String    @map("user_id")
+  accessToken           String?   @map("access_token")
+  refreshToken          String?   @map("refresh_token")
+  idToken               String?   @map("id_token")
+  accessTokenExpiresAt  DateTime? @map("access_token_expires_at")
+  refreshTokenExpiresAt DateTime? @map("refresh_token_expires_at")
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @map("created_at")
+  updatedAt             DateTime  @map("updated_at")
+  user                  AuthUser  @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "account_user_id_user_id_fk")
+
+  @@index([userId])
+  @@map("account")
+  @@schema("auth")
+}
+
+model AuthVerification {
+  id         String   @id
+  identifier String
+  value      String
+  expiresAt  DateTime @map("expires_at") @db.Timestamp(6)
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt  DateTime @default(now()) @map("updated_at") @db.Timestamp(6)
+
+  @@index([identifier])
+  @@map("verification")
+  @@schema("auth")
+}
 
 enum Role {
   ORG_ADMIN
@@ -315,12 +299,12 @@ enum Role {
 }
 
 enum MembershipStatus {
-  PENDING // Account created, not paid yet
-  ACTIVE // Paid member in good standing
-  GRACE_PERIOD // Subscription elapsed. 3 day grace period
-  SUSPENDED // Grace period expired, locked out from premises
-  CANCELLED // User cancels subscription. user can request re-enrolment
-  REVOKED // Banned by admin from gym for misbehaviour
+  PENDING
+  ACTIVE
+  GRACE_PERIOD
+  SUSPENDED
+  CANCELLED
+  REVOKED
 
   @@schema("stride")
 }
@@ -372,58 +356,4 @@ enum InvitationStatus {
   EXPIRED
 
   @@schema("stride")
-}
-
-// ------------------------------------------------------
-// SCHEMA: auth (Managed by better-auth)
-// ------------------------------------------------------
-
-model AuthUser {
-  id            String        @id
-  name          String
-  email         String        @unique
-  emailVerified Boolean
-  image         String?
-  createdAt     DateTime
-  updatedAt     DateTime
-  sessions      AuthSession[]
-  accounts      AuthAccount[]
-
-  @@map("user")
-  @@schema("auth")
-}
-
-model AuthSession {
-  id        String   @id
-  expiresAt DateTime
-  token     String   @unique
-  createdAt DateTime
-  updatedAt DateTime
-  ipAddress String?
-  userAgent String?
-  userId    String
-  user      AuthUser @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@map("session")
-  @@schema("auth")
-}
-
-model AuthAccount {
-  id                    String    @id
-  accountId             String
-  providerId            String
-  userId                String
-  user                  AuthUser  @relation(fields: [userId], references: [id], onDelete: Cascade)
-  accessToken           String?
-  refreshToken          String?
-  idToken               String?
-  accessTokenExpiresAt  DateTime?
-  refreshTokenExpiresAt DateTime?
-  scope                 String?
-  password              String?
-  createdAt             DateTime
-  updatedAt             DateTime
-
-  @@map("account")
-  @@schema("auth")
 }

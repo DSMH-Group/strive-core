@@ -9,7 +9,7 @@ import {CurrentUser} from '../../common/decorators/current-user.decorator';
 import {ApiTenantId} from "../../common/decorators/tenant-header.decorator";
 
 @ApiTags('Metrics & Health Tracking')
-@ApiBearerAuth('JWT-auth') // 💡 Tells Swagger this controller requires the Bearer token
+@ApiBearerAuth('Bearer-auth') // 💡 Tells Swagger this controller requires the Bearer token
 @Controller('metrics')
 @UseGuards(SessionAuthGuard, RolesGuard)
 @ApiTenantId() // 💡 Your custom decorator for the header

@@ -129,7 +129,7 @@ export class MembersService {
         }
 
         // RBAC Check (Simplified for the updated schema)
-        const isSelf = membership.userId === currentUser.sub;
+        const isSelf = membership.userId === currentUser.id;
         const isTenantAdmin = currentUser.tenantRoles?.[tenantId] === Role.ORG_ADMIN ||
             currentUser.tenantRoles?.[tenantId] === Role.MANAGER;
 
