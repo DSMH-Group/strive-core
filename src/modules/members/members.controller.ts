@@ -4,7 +4,7 @@ import {ApiBearerAuth, ApiOperation, ApiParam, ApiQuery, ApiResponse, ApiTags} f
 import {MembersService} from './members.service';
 import {CreateMembershipDto, TransitionMembershipDto, UpdateMembershipDto} from './dto/members.dto';
 import {CreateInvitationDto} from './dto/invitations.dto';
-import {JwtAuthGuard} from '../../common/guards/jwt-auth.guard';
+import {SessionAuthGuard} from '../../common/guards/session-auth.guard';
 import {RolesGuard} from '../../common/guards/roles.guard';
 import {Roles} from '../../common/decorators/roles.decorator';
 import {CurrentUser} from '../../common/decorators/current-user.decorator';
@@ -14,7 +14,7 @@ import {ApiTenantId} from '../../common/decorators/tenant-header.decorator';
 @ApiTags('Memberships & Lifecycle')
 @ApiBearerAuth('JWT-auth')
 @ApiTenantId() // Ensure this applies @ApiHeader({ name: 'X-Tenant-ID' }) under the hood
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(SessionAuthGuard, RolesGuard)
 @Controller('members')
 export class MembersController {
     constructor(private readonly membersService: MembersService) {

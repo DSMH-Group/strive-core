@@ -2,7 +2,7 @@ import {Body, Controller, Get, Headers, HttpStatus, Post, Query, UseGuards} from
 import {ApiBearerAuth, ApiOperation, ApiQuery, ApiResponse, ApiTags} from '@nestjs/swagger';
 import {MetricsService} from './metrics.service';
 import {CreateMetricDto, HealthSyncDto} from './dto/metrics.dto';
-import {JwtAuthGuard} from '../../common/guards/jwt-auth.guard';
+import {SessionAuthGuard} from '../../common/guards/session-auth.guard';
 import {RolesGuard} from '../../common/guards/roles.guard';
 import {Roles} from '../../common/decorators/roles.decorator';
 import {CurrentUser} from '../../common/decorators/current-user.decorator';
@@ -11,7 +11,7 @@ import {ApiTenantId} from "../../common/decorators/tenant-header.decorator";
 @ApiTags('Metrics & Health Tracking')
 @ApiBearerAuth('JWT-auth') // 💡 Tells Swagger this controller requires the Bearer token
 @Controller('metrics')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(SessionAuthGuard, RolesGuard)
 @ApiTenantId() // 💡 Your custom decorator for the header
 export class MetricsController {
     constructor(private readonly metricsService: MetricsService) {

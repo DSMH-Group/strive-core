@@ -7,7 +7,7 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  schemas  = ["stride"]
+  schemas = ["stride", "auth"] // <-- Point to both!
 }
 
 // ------------------------------------------------------
@@ -315,12 +315,12 @@ enum Role {
 }
 
 enum MembershipStatus {
-  PENDING         // Account created, not paid yet
-  ACTIVE          // Paid member in good standing
-  GRACE_PERIOD    // Subscription elapsed. 3 day grace period
-  SUSPENDED       // Grace period expired, locked out from premises
-  CANCELLED       // User cancels subscription. user can request re-enrolment
-  REVOKED         // Banned by admin from gym for misbehaviour
+  PENDING // Account created, not paid yet
+  ACTIVE // Paid member in good standing
+  GRACE_PERIOD // Subscription elapsed. 3 day grace period
+  SUSPENDED // Grace period expired, locked out from premises
+  CANCELLED // User cancels subscription. user can request re-enrolment
+  REVOKED // Banned by admin from gym for misbehaviour
 
   @@schema("stride")
 }
@@ -372,4 +372,58 @@ enum InvitationStatus {
   EXPIRED
 
   @@schema("stride")
+}
+
+// ------------------------------------------------------
+// SCHEMA: auth (Managed by better-auth)
+// ------------------------------------------------------
+
+model AuthUser {
+  id            String        @id
+  name          String
+  email         String        @unique
+  emailVerified Boolean
+  image         String?
+  createdAt     DateTime
+  updatedAt     DateTime
+  sessions      AuthSession[]
+  accounts      AuthAccount[]
+
+  @@map("user")
+  @@schema("auth")
+}
+
+model AuthSession {
+  id        String   @id
+  expiresAt DateTime
+  token     String   @unique
+  createdAt DateTime
+  updatedAt DateTime
+  ipAddress String?
+  userAgent String?
+  userId    String
+  user      AuthUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("session")
+  @@schema("auth")
+}
+
+model AuthAccount {
+  id                    String    @id
+  accountId             String
+  providerId            String
+  userId                String
+  user                  AuthUser  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+  createdAt             DateTime
+  updatedAt             DateTime
+
+  @@map("account")
+  @@schema("auth")
 }

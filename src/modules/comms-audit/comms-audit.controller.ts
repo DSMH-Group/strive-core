@@ -1,15 +1,15 @@
 // src/modules/comms-audit/comms-audit.controller.ts
-import { Controller, Get, Post, Body, Query, Headers, UseGuards } from '@nestjs/common';
-import { CommsAuditService } from './comms-audit.service';
-import { BroadcastDto } from './dto/broadcast.dto';
-import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
-import { RolesGuard } from '../../common/guards/roles.guard';
-import { Roles } from '../../common/decorators/roles.decorator';
+import {Body, Controller, Get, Headers, Post, Query, UseGuards} from '@nestjs/common';
+import {CommsAuditService} from './comms-audit.service';
+import {BroadcastDto} from './dto/broadcast.dto';
+import {SessionAuthGuard} from '../../common/guards/session-auth.guard';
+import {RolesGuard} from '../../common/guards/roles.guard';
+import {Roles} from '../../common/decorators/roles.decorator';
 import {ApiTenantId} from "../../common/decorators/tenant-header.decorator";
 
 @Controller() // Endpoints mapped via table: /api/v1/...
 @ApiTenantId()
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(SessionAuthGuard, RolesGuard)
 export class CommsAuditController {
     constructor(private readonly commsService: CommsAuditService) {}
 

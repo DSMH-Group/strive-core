@@ -1,17 +1,18 @@
 // src/modules/documents/documents.controller.ts
-import { Controller, Get, Post, Body, UseGuards, Query, ForbiddenException } from '@nestjs/common';
-import { DocumentsService } from './documents.service';
-import { GetUploadUrlDto } from './dto/upload-request.dto';
-import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
-import { RolesGuard } from '../../common/guards/roles.guard';
-import { Roles } from '../../common/decorators/roles.decorator';
-import { CurrentUser } from '../../common/decorators/current-user.decorator';
-import { ApiTenantId } from "../../common/decorators/tenant-header.decorator";
+import {Body, Controller, ForbiddenException, Get, Post, Query, UseGuards} from '@nestjs/common';
+import {DocumentsService} from './documents.service';
+import {GetUploadUrlDto} from './dto/upload-request.dto';
+import {SessionAuthGuard} from '../../common/guards/session-auth.guard';
+import {RolesGuard} from '../../common/guards/roles.guard';
+import {Roles} from '../../common/decorators/roles.decorator';
+import {CurrentUser} from '../../common/decorators/current-user.decorator';
+import {ApiTenantId} from "../../common/decorators/tenant-header.decorator";
+
 // Notice: We don't even need to import 'Headers' from @nestjs/common anymore!
 
 @Controller('files')
 @ApiTenantId() // Keeps our Swagger docs accurate
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(SessionAuthGuard, RolesGuard)
 export class DocumentsController {
     constructor(private readonly documentsService: DocumentsService) {}
 

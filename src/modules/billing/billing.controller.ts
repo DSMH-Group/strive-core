@@ -3,7 +3,7 @@ import {Body, Controller, Get, Headers, Post, Query, UseGuards} from '@nestjs/co
 import {ApiBearerAuth, ApiOperation, ApiTags} from '@nestjs/swagger';
 import {BillingService} from './billing.service';
 import {CreateInvoiceDto, ManualPaymentDto} from './dto/billing.dto';
-import {JwtAuthGuard} from '../../common/guards/jwt-auth.guard';
+import {SessionAuthGuard} from '../../common/guards/session-auth.guard';
 import {RolesGuard} from '../../common/guards/roles.guard';
 import {Roles} from '../../common/decorators/roles.decorator';
 import {CurrentUser} from '../../common/decorators/current-user.decorator';
@@ -15,7 +15,7 @@ export class BillingController {
     }
 
     @Post('invoices')
-    @UseGuards(JwtAuthGuard, RolesGuard)
+    @UseGuards(SessionAuthGuard, RolesGuard)
     @Roles('ORG_ADMIN', 'MANAGER')
     @ApiBearerAuth('JWT-auth')
     async createInvoice(@Headers('X-Tenant-ID') tenantId: string, @Body() dto: CreateInvoiceDto) {
@@ -23,7 +23,7 @@ export class BillingController {
     }
 
     @Get('invoices')
-    @UseGuards(JwtAuthGuard)
+    @UseGuards(SessionAuthGuard)
     @ApiBearerAuth('JWT-auth')
     async getInvoices(
         @Headers('X-Tenant-ID') tenantId: string,
@@ -36,7 +36,7 @@ export class BillingController {
     }
 
     @Post('payments/manual')
-    @UseGuards(JwtAuthGuard, RolesGuard)
+    @UseGuards(SessionAuthGuard, RolesGuard)
     @Roles('ORG_ADMIN', 'MANAGER')
     @ApiBearerAuth('JWT-auth')
     async manualPayment(

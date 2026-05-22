@@ -5,7 +5,7 @@ import {UsersService} from './users.service';
 import {SyncUserWebhookDto} from './dto/sync-user.dto';
 import {UpdateUserDto} from './dto/update-user.dto';
 import {UserResponseDto} from './dto/user-response.dto';
-import {JwtAuthGuard} from '../../common/guards/jwt-auth.guard';
+import {SessionAuthGuard} from '../../common/guards/session-auth.guard';
 import {BasicAuthGuard} from '../../common/guards/basic-auth.guard';
 import {CurrentUser} from '../../common/decorators/current-user.decorator';
 
@@ -29,7 +29,7 @@ export class UsersController {
     }
 
     @Get('me')
-    @UseGuards(JwtAuthGuard)
+    @UseGuards(SessionAuthGuard)
     @ApiBearerAuth('JWT-auth')
     @ApiOperation({summary: 'Get Current Profile'})
     @ApiResponse({
@@ -44,7 +44,7 @@ export class UsersController {
     }
 
     @Patch('me')
-    @UseGuards(JwtAuthGuard)
+    @UseGuards(SessionAuthGuard)
     @ApiBearerAuth('JWT-auth')
     @ApiOperation({summary: 'Update Current Profile'})
     @ApiResponse({status: HttpStatus.OK, description: 'Profile updated successfully.'})

@@ -1,11 +1,11 @@
 // src/modules/attendance/attendance.controller.ts
-import { Controller, Get, Post, Patch, Body, Param, Headers, Query, UseGuards } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiBearerAuth, ApiHeader } from '@nestjs/swagger';
-import { AttendanceService } from './attendance.service';
-import { CreateAttendanceDto, UpdateAttendanceDto, AttendanceQueryDto } from './dto/attendance.dto';
-import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
-import { RolesGuard } from '../../common/guards/roles.guard';
-import { Roles } from '../../common/decorators/roles.decorator';
+import {Body, Controller, Get, Headers, Param, Patch, Post, Query, UseGuards} from '@nestjs/common';
+import {ApiBearerAuth, ApiTags} from '@nestjs/swagger';
+import {AttendanceService} from './attendance.service';
+import {AttendanceQueryDto, CreateAttendanceDto, UpdateAttendanceDto} from './dto/attendance.dto';
+import {SessionAuthGuard} from '../../common/guards/session-auth.guard';
+import {RolesGuard} from '../../common/guards/roles.guard';
+import {Roles} from '../../common/decorators/roles.decorator';
 import {ApiTenantId} from "../../common/decorators/tenant-header.decorator";
 
 @ApiTags('Attendance & Ingress')
@@ -15,7 +15,7 @@ export class AttendanceController {
     constructor(private readonly attendanceService: AttendanceService) {}
 
     @Post()
-    @UseGuards(JwtAuthGuard, RolesGuard)
+    @UseGuards(SessionAuthGuard, RolesGuard)
     @Roles('ORG_ADMIN', 'MANAGER', 'TRAINER') // Add IoT_DEVICE_TOKEN logic to your Guard
     @ApiBearerAuth('JWT-auth')
     
@@ -24,7 +24,7 @@ export class AttendanceController {
     }
 
     @Get()
-    @UseGuards(JwtAuthGuard, RolesGuard)
+    @UseGuards(SessionAuthGuard, RolesGuard)
     @Roles('ORG_ADMIN', 'MANAGER')
     @ApiBearerAuth('JWT-auth')
     
@@ -36,7 +36,7 @@ export class AttendanceController {
     }
 
     @Patch(':id')
-    @UseGuards(JwtAuthGuard, RolesGuard)
+    @UseGuards(SessionAuthGuard, RolesGuard)
     @Roles('ORG_ADMIN', 'MANAGER', 'TRAINER')
     @ApiBearerAuth('JWT-auth')
     

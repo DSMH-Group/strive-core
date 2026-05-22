@@ -1,19 +1,19 @@
 // src/modules/scheduling/scheduling.controller.ts
-import { Controller, Get, Post, Delete, Body, Param, Headers, UseGuards, HttpStatus, Request } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiBearerAuth, ApiHeader } from '@nestjs/swagger';
-import { SchedulingService } from './scheduling.service';
-import { CreateResourceDto } from './dto/resource.dto';
-import { CreateBookingDto } from './dto/booking.dto';
-import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
-import { RolesGuard } from '../../common/guards/roles.guard';
-import { Roles } from '../../common/decorators/roles.decorator';
+import {Body, Controller, Delete, Get, Headers, Param, Post, Request, UseGuards} from '@nestjs/common';
+import {ApiBearerAuth, ApiOperation, ApiTags} from '@nestjs/swagger';
+import {SchedulingService} from './scheduling.service';
+import {CreateResourceDto} from './dto/resource.dto';
+import {CreateBookingDto} from './dto/booking.dto';
+import {SessionAuthGuard} from '../../common/guards/session-auth.guard';
+import {RolesGuard} from '../../common/guards/roles.guard';
+import {Roles} from '../../common/decorators/roles.decorator';
 import {ApiTenantId} from "../../common/decorators/tenant-header.decorator";
 
 @ApiTags('Resources & Scheduling')
 @ApiBearerAuth('JWT-auth')
 @ApiTenantId()
 
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(SessionAuthGuard, RolesGuard)
 @Controller('scheduling')
 export class SchedulingController {
     constructor(private readonly schedulingService: SchedulingService) {}

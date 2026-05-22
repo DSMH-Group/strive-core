@@ -4,7 +4,7 @@ import {ApiBearerAuth, ApiOperation, ApiParam, ApiQuery, ApiResponse, ApiTags} f
 import {TenantsService} from './tenants.service';
 import {CreateTenantDto} from './dto/create-tenant.dto';
 import {UpdateTenantDto} from './dto/update-tenant.dto';
-import {JwtAuthGuard} from '../../common/guards/jwt-auth.guard';
+import {SessionAuthGuard} from '../../common/guards/session-auth.guard';
 import {RolesGuard} from '../../common/guards/roles.guard';
 import {Roles} from '../../common/decorators/roles.decorator';
 import {ApiTenantId} from "../../common/decorators/tenant-header.decorator";
@@ -31,7 +31,7 @@ export class TenantsController {
     }
 
     @Post()
-    @UseGuards(JwtAuthGuard)
+    @UseGuards(SessionAuthGuard)
     @ApiBearerAuth('JWT-auth')
     @ApiOperation({summary: 'Provision a new Gym Environment'})
     @ApiResponse({status: HttpStatus.CREATED, description: 'Tenant created successfully.'})
@@ -50,7 +50,7 @@ export class TenantsController {
     }
 
     @Patch()
-    @UseGuards(JwtAuthGuard, RolesGuard)
+    @UseGuards(SessionAuthGuard, RolesGuard)
     @ApiTenantId()
     @Roles('ORG_ADMIN') // Only the gym owner/admin can change billing keys
     @ApiBearerAuth('JWT-auth')

@@ -1,8 +1,8 @@
-import { Test, TestingModule } from '@nestjs/testing';
-import { INestApplication } from '@nestjs/common';
+import {Test, TestingModule} from '@nestjs/testing';
+import {INestApplication} from '@nestjs/common';
 import request from 'supertest';
-import { AppModule } from '../src/app.module';
-import { JwtAuthGuard } from '../src/common/guards/jwt-auth.guard';
+import {AppModule} from '../src/app.module';
+import {SessionAuthGuard} from '../src/common/guards/session-auth.guard';
 
 describe('Users (e2e)', () => {
     let app: INestApplication;
@@ -12,7 +12,7 @@ describe('Users (e2e)', () => {
             imports: [AppModule],
         })
             // We mock the Guard to bypass Keycloak cert verification during CI/CD
-            .overrideGuard(JwtAuthGuard)
+            .overrideGuard(SessionAuthGuard)
             .useValue({
                 canActivate: (context) => {
                     const req = context.switchToHttp().getRequest();
