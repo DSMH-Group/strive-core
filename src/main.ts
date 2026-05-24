@@ -51,11 +51,20 @@ async function bootstrap() {
     );
 
     // 3. CORS Configuration
-    // This is essential for the Next.js App Router and Client Components
+    const allowedOrigins = [
+        process.env.NEXT_PUBLIC_BASE_URL,
+        'http://localhost:3000',
+        'http://localhost:3001',
+    ].filter(Boolean);
+
     app.enableCors({
         origin: (origin, callback) => {
-            // Allow if origin matches your base domain or any of the tenant subdomains
-            if (!origin || origin.endsWith('.dsmhgroup.com') || origin === 'http://localhost:3000' || origin === process.env.NEXT_PUBLIC_BASE_URL || origin === 'http://localhost:3001') {
+            if (
+                !origin ||
+                origin.endsWith('.dsmhgroup.com') ||
+                origin === 'https://dsmhgroup.com' ||
+                allowedOrigins.includes(origin)
+            ) {
                 callback(null, true);
             } else {
                 callback(new Error('Not allowed by CORS'));
