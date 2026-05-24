@@ -51,6 +51,8 @@ async function bootstrap() {
     );
 
     // 3. CORS Configuration
+    const BASE_DOMAIN = process.env.BASE_DOMAIN; // "dsmhgroup.com" or "strive.lk"
+
     const allowedOrigins = [
         process.env.NEXT_PUBLIC_BASE_URL,
         'http://localhost:3000',
@@ -61,8 +63,8 @@ async function bootstrap() {
         origin: (origin, callback) => {
             if (
                 !origin ||
-                origin.endsWith('.dsmhgroup.com') ||
-                origin === 'https://dsmhgroup.com' ||
+                (BASE_DOMAIN && origin.endsWith(`.${BASE_DOMAIN}`)) ||
+                (BASE_DOMAIN && origin === `https://${BASE_DOMAIN}`) ||
                 allowedOrigins.includes(origin)
             ) {
                 callback(null, true);
