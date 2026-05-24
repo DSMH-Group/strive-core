@@ -184,20 +184,27 @@ export class MembersService {
         });
 
         if (existingUser) {
-            // User exists! Skip invitation, link them directly.
             const membership = await this.createMembership(tenantId, {
                 userId: existingUser.id,
                 initialRole: dto.initialRole,
                 rfidTag: ''
             });
-
-            // Dispatch async notification: "You've been added to Gym X"
             this.dispatchNotifications(dto.email, dto.phone, 'ADDED_TO_TENANT', tenantId);
-
             return { message: 'User already existed globally and was linked automatically.', membership };
         }
 
-        // 2. User does not exist. Create a Pending Invitation.
+        // 2. Fetch the tenant domain to build the routing link
+        const tenant = await this.prisma.tenant.findUnique({
+            where: {id: tenantId},
+            select: {domain: true, slug: true}
+        });
+
+        // Use exact domain if set, otherwise fallback to standard subdomain architecture
+        const routingDomain = tenant?.domain && tenant.domain.includes('.')
+            ? tenant.domain
+            : `${tenant?.slug || tenant?.domain}.dsmhgroup.com`;
+
+        // 3. Create the Pending Invitation.
         const pendingInvite = await this.prisma.tenantInvitation.create({
             data: {
                 tenantId,
@@ -205,14 +212,64 @@ export class MembersService {
                 phone: dto.phone,
                 role: dto.initialRole,
                 status: 'PENDING',
-                expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) // 7 days expiry
+                expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
             }
         });
 
-        // 3. "Blast Both": Fire off Email and/or SMS asynchronously
-        this.dispatchNotifications(dto.email, dto.phone, 'INVITATION_SENT', tenantId);
+        // 4. Fire off Email and/or SMS asynchronously WITH the invite payload
+        this.dispatchNotifications(dto.email, dto.phone, 'INVITATION_SENT', tenantId, pendingInvite.id, routingDomain);
 
         return { message: 'Invitation sent successfully.', pendingInvite };
+    }
+
+    /**
+     * Updated Dispatcher to build the URL and inject variables.
+     */
+    private async dispatchNotifications(
+        email?: string | null,
+        phone?: string | null,
+        templateType: string = 'INVITATION_SENT',
+        tenantId?: string,
+        inviteId?: string,
+        routingDomain?: string
+    ): Promise<void> {
+        const tasks: Promise<void | any>[] = [];
+
+        // 🚀 Construct the secure handshake link
+        const baseUrl = process.env.NEXT_PUBLIC_WEBAPP_URL || 'https://dsmhgroup.com';
+        let actionUrl = `${baseUrl}/register`;
+
+        if (inviteId && email && routingDomain) {
+            actionUrl = `${baseUrl}/register?inviteToken=${inviteId}&email=${encodeURIComponent(email)}&domain=${routingDomain}`;
+        }
+
+        if (email) {
+            const emailTask = async () => {
+                this.logger.log(`[EMAIL] Dispatching ${templateType} to ${email}`);
+                this.logger.log(`[EMAIL PAYLOAD] Click here to activate your account: ${actionUrl}`);
+                // await this.resendService.sendEmail({ ... })
+            };
+            tasks.push(emailTask());
+        }
+
+        if (phone) {
+            const smsTask = async () => {
+                this.logger.log(`[SMS] Dispatching ${templateType} to ${phone}`);
+                this.logger.log(`[SMS PAYLOAD] Join Stride: ${actionUrl}`);
+                // await this.textlkService.sendSms({ ... })
+            };
+            tasks.push(smsTask());
+        }
+
+        if (tasks.length > 0) {
+            Promise.allSettled(tasks).then(results => {
+                results.forEach((result, index) => {
+                    if (result.status === 'rejected') {
+                        this.logger.error(`[Notification Dispatch Error] Task ${index} failed:`, result.reason);
+                    }
+                });
+            });
+        }
     }
 
     async getPendingInvites(tenantId: string) {
@@ -236,51 +293,5 @@ export class MembersService {
 
         this.dispatchNotifications(invite.email, invite.phone, 'INVITATION_SENT', tenantId);
         return { message: 'Invitation resent successfully.' };
-    }
-
-    /**
-     * Dispatches notifications asynchronously.
-     * Uses Promise.allSettled to prevent partial failures from crashing the thread.
-     */
-    private async dispatchNotifications(
-        email?: string | null,
-        phone?: string | null,
-        templateType: string = 'INVITATION_SENT',
-        tenantId?: string
-    ): Promise<void> {
-        // 1. Explicitly type the array to hold Promises
-        const tasks: Promise<void | any>[] = [];
-
-        if (email) {
-            // 2. Push an actual asynchronous operation (Promise)
-            // Replace this mock with: this.resendService.sendEmail(...)
-            const emailTask = async () => {
-                this.logger.log(`[EMAIL] Dispatching ${templateType} to ${email}`);
-                // await this.httpService.axiosRef.post('https://api.resend.com/emails', {...})
-            };
-            tasks.push(emailTask());
-        }
-
-        if (phone) {
-            // 2. Push an actual asynchronous operation (Promise)
-            // Replace this mock with: this.textlkService.sendSms(...)
-            const smsTask = async () => {
-                this.logger.log(`[SMS] Dispatching ${templateType} to ${phone}`);
-                // await this.httpService.axiosRef.post('https://app.text.lk/api/v3/sms/send', {...})
-            };
-            tasks.push(smsTask());
-        }
-
-        // 3. Fire and forget without blocking the HTTP response
-        if (tasks.length > 0) {
-            Promise.allSettled(tasks).then(results => {
-                results.forEach((result, index) => {
-                    if (result.status === 'rejected') {
-                        // In production, we'd want to log exactly which channel failed
-                        this.logger.error(`[Notification Dispatch Error] Task ${index} failed:`, result.reason);
-                    }
-                });
-            });
-        }
     }
 }
