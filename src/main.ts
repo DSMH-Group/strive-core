@@ -60,19 +60,9 @@ async function bootstrap() {
     ].filter(Boolean);
 
     app.enableCors({
-        origin: (origin, callback) => {
-            if (
-                !origin ||
-                (BASE_DOMAIN && origin.endsWith(`.${BASE_DOMAIN}`)) ||
-                (BASE_DOMAIN && origin === `https://${BASE_DOMAIN}`) ||
-                allowedOrigins.includes(origin)
-            ) {
-                callback(null, true);
-            } else {
-                callback(new Error('Not allowed by CORS'));
-            }
-        },
+        origin: allowedOrigins, // Pass the array directly!
         credentials: true,
+        methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
         allowedHeaders: ['Content-Type', 'Authorization', 'X-Tenant-ID'],
     });
 
