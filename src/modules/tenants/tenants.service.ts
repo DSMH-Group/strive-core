@@ -1,3 +1,4 @@
+// src/modules/tenants/tenants.service.ts
 import {ConflictException, Injectable, Logger, NotFoundException} from '@nestjs/common';
 import {CreateTenantDto} from './dto/create-tenant.dto';
 import {UpdateTenantDto} from './dto/update-tenant.dto';
@@ -58,7 +59,6 @@ export class TenantsService {
         if (token) {
             try {
                 // Decode or verify token payload claims to capture the user's Keycloak ID
-                // In a standard JWT, the unique sub claim maps to Keycloak's identifier
                 const jwt = require('jsonwebtoken');
                 const decoded = jwt.decode(token);
                 const keycloakId = decoded?.sub || decoded?.keycloakId;
@@ -81,7 +81,6 @@ export class TenantsService {
                 }
             } catch (error) {
                 this.logger.warn('Token context present but failed parsing or resolution checks.', error.stack);
-                // Non-blocking catch so unauthenticated or expired users can still browse public listings cleanly
             }
         }
 
@@ -89,7 +88,6 @@ export class TenantsService {
         return tenants.map(tenant => {
             const config = (tenant.themeConfig || {}) as any;
 
-            // Match live user membership status parameters
             const userMembership = userMemberships.find(m => m.tenantId === tenant.id);
             const resolvedMembershipStatus = userMembership ? userMembership.status : "NONE";
 
@@ -100,14 +98,11 @@ export class TenantsService {
                 vertical: config.vertical || "High Performance",
                 location: config.location || "Sri Lanka",
                 accentColor: config.primaryColor ? `from-[${config.primaryColor}]/20 to-zinc-900` : "from-orange-600/20 to-amber-600/10",
-                membershipStatus: resolvedMembershipStatus // 👈 This wires live statuses straight to the UI!
+                membershipStatus: resolvedMembershipStatus
             };
         });
     }
 
-    /**
-     * Utility to generate a clean, URL-safe slug from the Gym Name
-     */
     private generateSlug(name: string): string {
         return name
             .toLowerCase()
@@ -117,11 +112,7 @@ export class TenantsService {
             .replace(/-+/g, '-');
     }
 
-    /**
-     * Provisions a new Tenant and automatically assigns the creator as ORG_ADMIN.
-     */
     async createTenant(dto: CreateTenantDto) {
-        // 1. Validation Checks
         const generatedSlug = this.generateSlug(dto.name);
 
         const existingTenant = await this.prisma.tenant.findFirst({
@@ -141,10 +132,8 @@ export class TenantsService {
             );
         }
 
-        // 2. Transactional Creation (Atomicity)
         try {
             return await this.prisma.$transaction(async (tx) => {
-                // Create the Tenant record
                 const tenant = await tx.tenant.create({
                     data: {
                         name: dto.name,
@@ -154,14 +143,18 @@ export class TenantsService {
                             primaryColor: '#000000',
                             logoUrl: null
                         } as Prisma.InputJsonObject,
+                        // Initialize default business rules upon creation
+                        businessRules: {
+                            allowTokenTopUps: false,
+                            defaultCurrency: 'LKR',
+                            tokenPrice: 1000
+                        } as Prisma.InputJsonObject
                     }
                 });
 
-                // Create the Membership for the creator and assign ORG_ADMIN role
-                // This allows the user to immediately pass the RolesGuard for this tenant.
                 await tx.membership.create({
                     data: {
-                        userId: dto.ownerId, // The ID from your Keycloak Webhook sync
+                        userId: dto.ownerId,
                         tenantId: tenant.id,
                         status: MembershipStatus.ACTIVE,
                         roles: {
@@ -181,9 +174,6 @@ export class TenantsService {
         }
     }
 
-    /**
-     * Fetch public configuration for a tenant (used by frontend for branding)
-     */
     async getPublicConfig(tenantId: string) {
         const tenant = await this.prisma.tenant.findUnique({
             where: {id: tenantId},
@@ -206,7 +196,7 @@ export class TenantsService {
     }
 
     /**
-     * Updates tenant settings (Theme, Taxes, Payment Gateways)
+     * Updates tenant settings (Theme, Taxes, Payment Gateways, Business Rules)
      */
     async updateTenantConfig(tenantId: string, dto: UpdateTenantDto) {
         let secureGatewayKeys = dto.gatewayKeys as any;
@@ -219,9 +209,12 @@ export class TenantsService {
         return this.prisma.tenant.update({
             where: {id: tenantId},
             data: {
+                ...(dto.name && {name: dto.name}),
                 ...(dto.themeConfig && {themeConfig: dto.themeConfig as Prisma.InputJsonObject}),
                 ...(dto.taxRules && {taxRules: dto.taxRules as Prisma.InputJsonObject}),
                 ...(secureGatewayKeys && {gatewayKeys: secureGatewayKeys as Prisma.InputJsonObject}),
+                // 🚀 NEW: Safely cast and store business rules
+                ...(dto.businessRules && {businessRules: dto.businessRules as Prisma.InputJsonObject}),
             }
         });
     }

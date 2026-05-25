@@ -26,19 +26,15 @@ export class MembersService {
         });
 
         if (existing) {
-            // 💡 LOGIC: If they exist, we "Upgrade" them instead of failing.
-            // Check if they already have the role we are trying to add.
             const hasRole = existing.roles.some(r => r.role === dto.initialRole);
 
             return this.prisma.membership.update({
                 where: {id: existing.id},
                 data: {
                     status: MembershipStatus.PENDING,
-                    // Only add the role if they don't have it yet
                     roles: !hasRole ? {
                         create: {role: dto.initialRole}
                     } : undefined,
-                    // If an RFID tag was provided in the DTO, link it now
                     ...(dto.rfidTag && {rfidTag: dto.rfidTag})
                 },
                 include: {user: true, roles: true}
@@ -70,9 +66,6 @@ export class MembersService {
      * Vital for the "Login with Stride" flow.
      */
     async getMyMembership(tenantId: string, keycloakId: string) {
-        // 💡 THE FIX: We use findFirst because findUnique only works with
-        // the direct unique keys (userId_tenantId).
-        // By using findFirst, we can "hop" through the user relation.
         const membership = await this.prisma.membership.findFirst({
             where: {
                 tenantId: tenantId,
@@ -83,6 +76,7 @@ export class MembersService {
             include: {
                 user: true,
                 roles: true,
+                activePlan: true, // 🚀 NEW: This includes the full Plan object (name, price)
                 tenant: {
                     select: {
                         name: true,
@@ -96,6 +90,8 @@ export class MembersService {
             throw new NotFoundException('No active membership found for this gym context.');
         }
 
+        // 💡 Note: tokensLeft, autoRenewEnabled, expiresAt, and activePlanId
+        // are scalar fields and are now returned automatically in this object!
         return membership;
     }
 
@@ -104,7 +100,6 @@ export class MembersService {
 
         if (status) whereClause.status = status;
 
-        // FIX 3: Filtering by role requires a relational query ("some")
         if (role) {
             whereClause.roles = {
                 some: {role: role}
@@ -113,7 +108,9 @@ export class MembersService {
 
         return this.prisma.membership.findMany({
             where: whereClause,
-            include: {user: true, roles: true},
+            // 🚀 Optional Bonus: You might want to include the activePlan here too
+            // so the Admin table can display which plan everyone is on!
+            include: {user: true, roles: true, activePlan: true},
             orderBy: {createdAt: 'desc'}
         });
     }
@@ -121,14 +118,14 @@ export class MembersService {
     async getMemberById(tenantId: string, membershipId: string, currentUser: any) {
         const membership = await this.prisma.membership.findUnique({
             where: {id: membershipId},
-            include: {user: true, roles: true}
+            include: {user: true, roles: true, activePlan: true} // Added activePlan here as well
         });
 
         if (!membership || membership.tenantId !== tenantId) {
             throw new NotFoundException('Membership not found in this environment.');
         }
 
-        // RBAC Check (Simplified for the updated schema)
+        // RBAC Check
         const isSelf = membership.userId === currentUser.id;
         const isTenantAdmin = currentUser.tenantRoles?.[tenantId] === Role.ORG_ADMIN ||
             currentUser.tenantRoles?.[tenantId] === Role.MANAGER;
@@ -147,7 +144,7 @@ export class MembersService {
         return this.prisma.membership.update({
             where: {id: membershipId},
             data: {status: dto.status},
-            include: {roles: true}
+            include: {roles: true, activePlan: true}
         });
     }
 
@@ -160,7 +157,6 @@ export class MembersService {
             throw new NotFoundException('Membership not found.');
         }
 
-        // FIX 4: Removed CANCELLED check, using PENDING/SUSPENDED from schema
         if (membership.status === MembershipStatus.SUSPENDED && dto.targetState === MembershipStatus.SUSPENDED) {
             throw new ConflictException('Membership is already suspended.');
         }
@@ -173,7 +169,6 @@ export class MembersService {
     }
 
     async inviteUser(tenantId: string, dto: CreateInvitationDto) {
-        // 1. "Smart Routing": Does this global user already exist?
         const existingUser = await this.prisma.user.findFirst({
             where: {
                 OR: [
@@ -193,18 +188,15 @@ export class MembersService {
             return { message: 'User already existed globally and was linked automatically.', membership };
         }
 
-        // 2. Fetch the tenant domain to build the routing link
         const tenant = await this.prisma.tenant.findUnique({
             where: {id: tenantId},
             select: {domain: true, slug: true}
         });
 
-        // Use exact domain if set, otherwise fallback to standard subdomain architecture
         const routingDomain = tenant?.domain && tenant.domain.includes('.')
             ? tenant.domain
             : `${tenant?.slug || tenant?.domain}.dsmhgroup.com`;
 
-        // 3. Create the Pending Invitation.
         const pendingInvite = await this.prisma.tenantInvitation.create({
             data: {
                 tenantId,
@@ -216,15 +208,11 @@ export class MembersService {
             }
         });
 
-        // 4. Fire off Email and/or SMS asynchronously WITH the invite payload
         this.dispatchNotifications(dto.email, dto.phone, 'INVITATION_SENT', tenantId, pendingInvite.id, routingDomain);
 
         return { message: 'Invitation sent successfully.', pendingInvite };
     }
 
-    /**
-     * Updated Dispatcher to build the URL and inject variables.
-     */
     private async dispatchNotifications(
         email?: string | null,
         phone?: string | null,
@@ -234,8 +222,6 @@ export class MembersService {
         routingDomain?: string
     ): Promise<void> {
         const tasks: Promise<void | any>[] = [];
-
-        // 🚀 Construct the secure handshake link
         const baseUrl = process.env.NEXT_PUBLIC_WEBAPP_URL || 'https://dsmhgroup.com';
         let actionUrl = `${baseUrl}/register`;
 
@@ -247,7 +233,6 @@ export class MembersService {
             const emailTask = async () => {
                 this.logger.log(`[EMAIL] Dispatching ${templateType} to ${email}`);
                 this.logger.log(`[EMAIL PAYLOAD] Click here to activate your account: ${actionUrl}`);
-                // await this.resendService.sendEmail({ ... })
             };
             tasks.push(emailTask());
         }
@@ -256,7 +241,6 @@ export class MembersService {
             const smsTask = async () => {
                 this.logger.log(`[SMS] Dispatching ${templateType} to ${phone}`);
                 this.logger.log(`[SMS PAYLOAD] Join Stride: ${actionUrl}`);
-                // await this.textlkService.sendSms({ ... })
             };
             tasks.push(smsTask());
         }
@@ -280,7 +264,6 @@ export class MembersService {
     }
 
     async revokeInvite(tenantId: string, inviteId: string) {
-        // Ensure it belongs to this tenant before deleting
         const invite = await this.prisma.tenantInvitation.findUnique({ where: { id: inviteId } });
         if (!invite || invite.tenantId !== tenantId) throw new NotFoundException('Invite not found.');
 
