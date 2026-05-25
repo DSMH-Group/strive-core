@@ -31,10 +31,10 @@ export class UsersController {
     @Get('me')
     @UseGuards(SessionAuthGuard)
     @ApiBearerAuth('Bearer-auth')
-    @ApiOperation({summary: 'Get Current Profile'})
+    @ApiOperation({summary: 'Get Current Profile & Ecosystem Workspaces'})
     @ApiResponse({
         status: HttpStatus.OK,
-        description: 'Returns the global identity profile.',
+        description: 'Returns the global identity profile including linked gym memberships.',
         type: UserResponseDto
     })
     async getMe(@CurrentUser() user: any) {
