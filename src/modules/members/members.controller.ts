@@ -9,11 +9,9 @@ import {RolesGuard} from '../../common/guards/roles.guard';
 import {Roles} from '../../common/decorators/roles.decorator';
 import {CurrentUser} from '../../common/decorators/current-user.decorator';
 import {MembershipStatus, Role} from '@prisma/client';
-import {ApiTenantId} from '../../common/decorators/tenant-header.decorator';
 
 @ApiTags('Memberships & Lifecycle')
 @ApiBearerAuth('Bearer-auth')
-@ApiTenantId() // Ensure this applies @ApiHeader({ name: 'X-Tenant-ID' }) under the hood
 @UseGuards(SessionAuthGuard, RolesGuard)
 @Controller('members')
 export class MembersController {
