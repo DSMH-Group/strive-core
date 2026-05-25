@@ -33,6 +33,7 @@ model Tenant {
   themeConfig       Json?
   taxRules          Json?
   gatewayKeys       Json?
+  businessRules Json? // 🚀 NEW: e.g., { "allowTokenTopUps": true, "defaultCurrency": "LKR" }
   createdAt         DateTime           @default(now())
   updatedAt         DateTime           @updatedAt
   tenantInvitations TenantInvitation[]
@@ -41,27 +42,57 @@ model Tenant {
   invoices          Invoice[]
   memberships       Membership[]
   resources         Resource[]
+  plans         Plan[] // 🚀 NEW: Relation to the tenant's product catalog
 
   @@map("tenants")
   @@schema("stride")
 }
 
+// 🚀 NEW: The Product Catalog (Membership Tiers)
+model Plan {
+  id            String   @id @default(uuid())
+  tenantId      String
+  name          String // e.g., "Standard"
+  monthlyPrice  Decimal  @db.Decimal(10, 2)
+  sessionTokens Int      @default(0) // Tokens granted per renewal
+  allocationCap Int? // Optional hard cap on token accumulation
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  tenant      Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  memberships Membership[]
+
+  @@map("plans")
+  @@schema("stride")
+}
+
 model Membership {
-  id        String           @id @default(uuid())
-  userId    String
-  tenantId  String
-  status    MembershipStatus @default(ACTIVE)
-  rfidTag   String?          @unique
-  createdAt DateTime         @default(now())
-  updatedAt DateTime         @updatedAt
+  id       String           @id @default(uuid())
+  userId   String
+  tenantId String
+  status   MembershipStatus @default(ACTIVE)
+  rfidTag  String?          @unique
+
+  // 🚀 NEW: Token Wallet & Subscription Engine Fields
+  tokensLeft       Int       @default(0)
+  activePlanId     String?
+  autoRenewEnabled Boolean   @default(true)
+  expiresAt        DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   attendances Attendance[]
   bookings    Booking[]
   documents   Document[]
-  invoices  Invoice[]
-  roles     MembershipRole[]
-  tenant    Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
-  metrics   Metric[]
+  invoices    Invoice[]
+  roles       MembershipRole[]
+  metrics     Metric[]
+
+  tenant     Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user       User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  activePlan Plan?  @relation(fields: [activePlanId], references: [id], onDelete: SetNull) // 🚀 NEW: Link to Plan
 
   @@unique([userId, tenantId])
   @@map("memberships")
@@ -220,6 +251,7 @@ model TenantInvitation {
 
   @@index([email])
   @@index([phone])
+  // @@map("tenant_invitations")
   @@schema("stride")
 }
 

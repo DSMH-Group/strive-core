@@ -1,8 +1,8 @@
 // src/modules/billing/billing.controller.ts
-import {Body, Controller, Get, Headers, Post, Query, UseGuards} from '@nestjs/common';
+import {Body, Controller, Get, Headers, Patch, Post, Query, UseGuards} from '@nestjs/common';
 import {ApiBearerAuth, ApiOperation, ApiTags} from '@nestjs/swagger';
 import {BillingService} from './billing.service';
-import {CreateInvoiceDto, ManualPaymentDto} from './dto/billing.dto';
+import {CreateInvoiceDto, ManualPaymentDto, SubscribeDto, TopUpDto} from './dto/billing.dto';
 import {SessionAuthGuard} from '../../common/guards/session-auth.guard';
 import {RolesGuard} from '../../common/guards/roles.guard';
 import {Roles} from '../../common/decorators/roles.decorator';
@@ -51,5 +51,47 @@ export class BillingController {
     @ApiOperation({summary: 'Unauthenticated gateway webhook'})
     async gatewayWebhook(@Body() payload: any) {
         return this.billingService.handleGatewayWebhook(payload);
+    }
+
+    // ====================================================================
+    // 🚀 NEW: Dynamic Checkout & Subscription Endpoints
+    // ====================================================================
+
+    @Post('checkout/subscribe')
+    @UseGuards(SessionAuthGuard, RolesGuard)
+    @Roles('MEMBER')
+    @ApiBearerAuth('Bearer-auth')
+    @ApiOperation({summary: 'Generate a payment gateway checkout hash for a new subscription'})
+    async subscribe(
+        @Headers('X-Tenant-ID') tenantId: string,
+        @Body() dto: SubscribeDto,
+        @CurrentUser() user: any
+    ) {
+        return this.billingService.generateSubscriptionCheckout(tenantId, user.id, dto);
+    }
+
+    @Post('checkout/top-up')
+    @UseGuards(SessionAuthGuard, RolesGuard)
+    @Roles('MEMBER')
+    @ApiBearerAuth('Bearer-auth')
+    @ApiOperation({summary: 'Generate a payment gateway checkout hash for a token top-up'})
+    async topUp(
+        @Headers('X-Tenant-ID') tenantId: string,
+        @Body() dto: TopUpDto,
+        @CurrentUser() user: any
+    ) {
+        return this.billingService.generateTopUpCheckout(tenantId, user.id, dto);
+    }
+
+    @Patch('subscriptions/me/cancel')
+    @UseGuards(SessionAuthGuard, RolesGuard)
+    @Roles('MEMBER')
+    @ApiBearerAuth('Bearer-auth')
+    @ApiOperation({summary: 'Cancel active subscription auto-renewal'})
+    async cancelSubscription(
+        @Headers('X-Tenant-ID') tenantId: string,
+        @CurrentUser() user: any
+    ) {
+        return this.billingService.cancelSubscription(tenantId, user.id);
     }
 }
