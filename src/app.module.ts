@@ -18,6 +18,7 @@ import {MetricsModule} from "./modules/metrics/metrics.module";
 import {DocumentsModule} from "./modules/documents/documents.module";
 import {CommsAuditModule} from "./modules/comms-audit/comms-audit.module";
 import {SystemModule} from "./modules/system/system.module";
+import {PlansModule} from "./modules/plans/plans.module";
 
 @Module({
     imports: [
@@ -34,7 +35,8 @@ import {SystemModule} from "./modules/system/system.module";
         MetricsModule,
         DocumentsModule,
         CommsAuditModule,
-        SystemModule
+        SystemModule,
+        PlansModule
     ],
 })
 export class AppModule implements NestModule {
@@ -43,30 +45,30 @@ export class AppModule implements NestModule {
             .apply(TenantMiddleware)
             .exclude(
                 // --- GLOBAL IDENTITY ---
-                { path: 'users/webhook', method: RequestMethod.POST },
-                { path: 'users/me', method: RequestMethod.GET },
-                { path: 'users/me', method: RequestMethod.PATCH },
+                {path: 'users/webhook', method: RequestMethod.POST},
+                {path: 'users/me', method: RequestMethod.GET},
+                {path: 'users/me', method: RequestMethod.PATCH},
 
                 // --- TENANT PROVISIONING ---
-                { path: 'tenants', method: RequestMethod.POST },
+                {path: 'tenants', method: RequestMethod.POST},
 
                 // --- SYSTEM & INFRASTRUCTURE ---
                 // Keep these as is, since health/metrics were excluded from the global prefix in main.ts
-                { path: '/health/*path', method: RequestMethod.GET },
-                { path: '/metrics', method: RequestMethod.GET },
+                {path: '/health/*path', method: RequestMethod.GET},
+                {path: '/metrics', method: RequestMethod.GET},
 
-                { path: '/users/webhook', method: RequestMethod.POST },
-                { path: '/users/me', method: RequestMethod.GET },
-                { path: '/users/me', method: RequestMethod.PATCH },
+                {path: '/users/webhook', method: RequestMethod.POST},
+                {path: '/users/me', method: RequestMethod.GET},
+                {path: '/users/me', method: RequestMethod.PATCH},
 
                 // --- TENANT PROVISIONING ---
-                { path: '/tenants', method: RequestMethod.POST },
+                {path: '/tenants', method: RequestMethod.POST},
                 {path: '/tenants', method: RequestMethod.GET},
 
                 // --- SYSTEM & INFRASTRUCTURE ---
                 // Keep these as is, since health/metrics were excluded from the global prefix in main.ts
-                { path: '/health/*path', method: RequestMethod.GET },
-                { path: '/metrics', method: RequestMethod.GET }
+                {path: '/health/*path', method: RequestMethod.GET},
+                {path: '/metrics', method: RequestMethod.GET}
             )
             .forRoutes({path: '*path', method: RequestMethod.ALL});
     }
