@@ -251,7 +251,7 @@ model TenantInvitation {
 
   @@index([email])
   @@index([phone])
-  // @@map("tenant_invitations")
+  @@map("tenant_invitations")
   @@schema("stride")
 }
 
