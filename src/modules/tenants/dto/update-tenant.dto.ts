@@ -39,7 +39,6 @@ class GatewayKeysDto {
     payhereSecret?: string; // Encrypted in the service layer before saving
 }
 
-// 🚀 NEW: Business Rules Configuration
 class BusinessRulesDto {
     @ApiPropertyOptional({example: true, description: 'Toggle whether members can purchase manual top-ups'})
     @IsOptional()
@@ -55,6 +54,15 @@ class BusinessRulesDto {
     @IsOptional()
     @IsNumber()
     tokenPrice?: number;
+
+    // 🚀 NEW: Self-Service Toggle
+    @ApiPropertyOptional({
+        example: false,
+        description: 'If false, members cannot buy plans directly; they must be invoiced by an admin.'
+    })
+    @IsOptional()
+    @IsBoolean()
+    allowSelfService?: boolean;
 }
 
 export class UpdateTenantDto {
@@ -81,7 +89,6 @@ export class UpdateTenantDto {
     @Type(() => GatewayKeysDto)
     gatewayKeys?: GatewayKeysDto;
 
-    // 🚀 NEW: Expose Business Rules to the Controller
     @ApiPropertyOptional({type: BusinessRulesDto})
     @IsOptional()
     @ValidateNested()

@@ -60,8 +60,9 @@ model Plan {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
-  tenant      Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenant      Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   memberships Membership[]
+  invitations TenantInvitation[] // 🚀 NEW: Reciprocal relation
 
   @@map("plans")
   @@schema("stride")
@@ -244,10 +245,13 @@ model TenantInvitation {
   phone     String?
   role      Role
   status    InvitationStatus @default(PENDING)
+  planId    String? // 🚀 NEW: Store the admin's selected plan
   expiresAt DateTime
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  plan   Plan?  @relation(fields: [planId], references: [id], onDelete: SetNull) // 🚀 NEW: Relation
 
   @@index([email])
   @@index([phone])

@@ -2,7 +2,7 @@
 import {ConflictException, ForbiddenException, Injectable, Logger, NotFoundException} from '@nestjs/common';
 import {PrismaService} from '../../database/prisma.service';
 import {CreateMembershipDto, TransitionMembershipDto, UpdateMembershipDto} from './dto/members.dto';
-import {MembershipStatus, Role} from '@prisma/client';
+import {InvitationStatus, InvoiceStatus, InvoiceType, MembershipStatus, Role} from '@prisma/client';
 import {CreateInvitationDto} from "./dto/invitations.dto";
 
 @Injectable()
@@ -61,22 +61,18 @@ export class MembersService {
         });
     }
 
-    /**
-     * Returns the active user's specific membership for the current gym context.
-     * Vital for the "Login with Stride" flow.
-     */
     async getMyMembership(tenantId: string, keycloakId: string) {
         const membership = await this.prisma.membership.findFirst({
             where: {
                 tenantId: tenantId,
                 user: {
-                    keycloakId: keycloakId // Use the Keycloak 'sub' to find the internal user
+                    keycloakId: keycloakId
                 }
             },
             include: {
                 user: true,
                 roles: true,
-                activePlan: true, // 🚀 NEW: This includes the full Plan object (name, price)
+                activePlan: true,
                 tenant: {
                     select: {
                         name: true,
@@ -89,9 +85,6 @@ export class MembersService {
         if (!membership) {
             throw new NotFoundException('No active membership found for this gym context.');
         }
-
-        // 💡 Note: tokensLeft, autoRenewEnabled, expiresAt, and activePlanId
-        // are scalar fields and are now returned automatically in this object!
         return membership;
     }
 
@@ -108,8 +101,6 @@ export class MembersService {
 
         return this.prisma.membership.findMany({
             where: whereClause,
-            // 🚀 Optional Bonus: You might want to include the activePlan here too
-            // so the Admin table can display which plan everyone is on!
             include: {user: true, roles: true, activePlan: true},
             orderBy: {createdAt: 'desc'}
         });
@@ -118,14 +109,13 @@ export class MembersService {
     async getMemberById(tenantId: string, membershipId: string, currentUser: any) {
         const membership = await this.prisma.membership.findUnique({
             where: {id: membershipId},
-            include: {user: true, roles: true, activePlan: true} // Added activePlan here as well
+            include: {user: true, roles: true, activePlan: true}
         });
 
         if (!membership || membership.tenantId !== tenantId) {
             throw new NotFoundException('Membership not found in this environment.');
         }
 
-        // RBAC Check
         const isSelf = membership.userId === currentUser.id;
         const isTenantAdmin = currentUser.tenantRoles?.[tenantId] === Role.ORG_ADMIN ||
             currentUser.tenantRoles?.[tenantId] === Role.MANAGER;
@@ -138,12 +128,11 @@ export class MembersService {
     }
 
     async updateMembership(tenantId: string, membershipId: string, dto: UpdateMembershipDto) {
-        // First ensure it exists and belongs to the tenant
         await this.getMemberById(tenantId, membershipId, {tenantRoles: {[tenantId]: Role.ORG_ADMIN}});
 
         return this.prisma.membership.update({
             where: {id: membershipId},
-            data: {status: dto.status},
+            data: {status: dto.status as MembershipStatus},
             include: {roles: true, activePlan: true}
         });
     }
@@ -163,13 +152,12 @@ export class MembersService {
 
         return this.prisma.membership.update({
             where: {id: membershipId},
-            data: {status: dto.targetState},
+            data: {status: dto.targetState as MembershipStatus},
             include: {roles: true}
         });
     }
 
     async inviteUser(tenantId: string, dto: CreateInvitationDto) {
-        // 1. Check if the user exists globally
         const existingUser = await this.prisma.user.findFirst({
             where: {
                 OR: [
@@ -179,7 +167,6 @@ export class MembersService {
             }
         });
 
-        // 2. Fetch tenant details for the notification routing domain
         const tenant = await this.prisma.tenant.findUnique({
             where: {id: tenantId},
             select: {domain: true, slug: true}
@@ -189,36 +176,116 @@ export class MembersService {
             ? tenant.domain
             : `${tenant?.slug || tenant?.domain}.dsmhgroup.com`;
 
-        // 3. Always create an invitation (do not auto-add to membership)
         const pendingInvite = await this.prisma.tenantInvitation.create({
             data: {
                 tenantId,
                 email: dto.email,
                 phone: dto.phone,
                 role: dto.initialRole,
-                status: 'PENDING',
+                planId: dto.planId, // 🚀 NEW: Save the admin's plan selection
+                status: InvitationStatus.PENDING,
                 expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-                // Optional: If your schema allows tracking who the invite belongs to upfront
-                // userId: existingUser?.id || null
             }
         });
 
-        // 4. Dispatch notifications based on whether they are an existing user or new
         if (existingUser) {
-            // Notify them that a gym wants them to join
             this.dispatchNotifications(dto.email, dto.phone, 'INVITATION_RECEIVED', tenantId, pendingInvite.id, routingDomain);
             return {
                 message: 'Invitation sent to existing user. Awaiting their acceptance.',
                 pendingInvite
             };
         } else {
-            // Notify a brand new user to create an account and join
             this.dispatchNotifications(dto.email, dto.phone, 'INVITATION_SENT', tenantId, pendingInvite.id, routingDomain);
             return {
                 message: 'Invitation sent successfully to new user.',
                 pendingInvite
             };
         }
+    }
+
+    // 🚀 NEW: The logic that fires when a user clicks the magic link and creates their account
+    async acceptInvitation(userId: string, inviteId: string) {
+        const invite = await this.prisma.tenantInvitation.findUnique({
+            where: {id: inviteId},
+            include: {plan: true} // Need plan details for the invoice
+        });
+
+        if (!invite) throw new NotFoundException('Invitation not found.');
+        if (invite.status !== InvitationStatus.PENDING) throw new ConflictException('Invitation is no longer valid or has already been claimed.');
+        if (invite.expiresAt < new Date()) throw new ConflictException('Invitation has expired.');
+
+        // Use a transaction to ensure both membership and invoice are created safely
+        return this.prisma.$transaction(async (tx) => {
+            // 1. Mark invite as CLAIMED
+            await tx.tenantInvitation.update({
+                where: {id: inviteId},
+                data: {status: InvitationStatus.CLAIMED}
+            });
+
+            // 2. Create the Membership
+            const membership = await tx.membership.create({
+                data: {
+                    userId,
+                    tenantId: invite.tenantId,
+                    // If a plan is attached, lock them in PENDING until they pay. Otherwise, activate immediately.
+                    status: invite.planId ? MembershipStatus.PENDING : MembershipStatus.ACTIVE,
+                    activePlanId: invite.planId || null,
+                    roles: {
+                        create: {role: invite.role}
+                    }
+                },
+                include: {user: true, roles: true, activePlan: true}
+            });
+
+            // 3. Create the OPEN invoice if a plan was assigned
+            if (invite.planId && invite.plan) {
+                await tx.invoice.create({
+                    data: {
+                        tenantId: invite.tenantId,
+                        membershipId: membership.id,
+                        type: InvoiceType.SUBSCRIPTION,
+                        status: InvoiceStatus.OPEN, // 🚀 Prompts the "Pay to Activate" UI
+                        totalAmount: invite.plan.monthlyPrice,
+                        dueDate: new Date(),
+                        items: {
+                            create: [{
+                                description: `Activation: ${invite.plan.name} Plan`,
+                                amount: invite.plan.monthlyPrice
+                            }]
+                        }
+                    }
+                });
+            }
+
+            return membership;
+        });
+    }
+
+    async getPendingInvites(tenantId: string) {
+        return this.prisma.tenantInvitation.findMany({
+            where: {tenantId, status: InvitationStatus.PENDING},
+            orderBy: {createdAt: 'desc'}
+        });
+    }
+
+    async revokeInvite(tenantId: string, inviteId: string) {
+        const invite = await this.prisma.tenantInvitation.findUnique({where: {id: inviteId}});
+        if (!invite || invite.tenantId !== tenantId) throw new NotFoundException('Invite not found.');
+
+        // Transitioning status to REVOKED instead of hard deleting (better for audits)
+        return this.prisma.tenantInvitation.update({
+            where: {id: inviteId},
+            data: {status: InvitationStatus.REVOKED}
+        });
+    }
+
+    async resendInvite(tenantId: string, inviteId: string) {
+        const invite = await this.prisma.tenantInvitation.findUnique({where: {id: inviteId}});
+        if (!invite || invite.tenantId !== tenantId) throw new NotFoundException('Invite not found.');
+        if (invite.status !== InvitationStatus.PENDING) throw new ConflictException('Only pending invites can be resent.');
+
+        this.dispatchNotifications(invite.email, invite.phone, 'INVITATION_SENT', tenantId, invite.id);
+        return {message: 'Invitation resent successfully.'};
     }
 
     private async dispatchNotifications(
@@ -262,27 +329,5 @@ export class MembersService {
                 });
             });
         }
-    }
-
-    async getPendingInvites(tenantId: string) {
-        return this.prisma.tenantInvitation.findMany({
-            where: { tenantId, status: 'PENDING' },
-            orderBy: { createdAt: 'desc' }
-        });
-    }
-
-    async revokeInvite(tenantId: string, inviteId: string) {
-        const invite = await this.prisma.tenantInvitation.findUnique({ where: { id: inviteId } });
-        if (!invite || invite.tenantId !== tenantId) throw new NotFoundException('Invite not found.');
-
-        return this.prisma.tenantInvitation.delete({ where: { id: inviteId } });
-    }
-
-    async resendInvite(tenantId: string, inviteId: string) {
-        const invite = await this.prisma.tenantInvitation.findUnique({ where: { id: inviteId } });
-        if (!invite || invite.tenantId !== tenantId) throw new NotFoundException('Invite not found.');
-
-        this.dispatchNotifications(invite.email, invite.phone, 'INVITATION_SENT', tenantId);
-        return { message: 'Invitation resent successfully.' };
     }
 }

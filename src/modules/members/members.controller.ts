@@ -148,4 +148,20 @@ export class MembersController {
     ) {
         return this.membersService.transitionState(tenantId, id, dto);
     }
+
+
+    @Post('invites/:inviteId/accept')
+    // 🚀 CRITICAL: Notice there is NO @Roles() guard here.
+    // At this exact moment, the user has a global account (SessionAuthGuard passes)
+    // but they do NOT have a tenant role yet!
+    @ApiOperation({summary: 'Accept an invitation and initialize onboarding/billing'})
+    @ApiParam({name: 'inviteId', type: 'string', description: 'UUID of the pending invitation'})
+    @ApiResponse({status: HttpStatus.CREATED, description: 'Invitation claimed, membership pending, invoice created.'})
+    async acceptInvitation(
+        @Param('inviteId') inviteId: string,
+        @CurrentUser() currentUser: any
+    ) {
+        // currentUser.id is the global User ID provided by your SessionAuthGuard
+        return this.membersService.acceptInvitation(currentUser.id, inviteId);
+    }
 }
