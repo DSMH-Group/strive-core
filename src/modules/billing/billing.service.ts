@@ -1,9 +1,8 @@
 // src/modules/billing/billing.service.ts
-import {BadRequestException, Injectable, NotFoundException} from '@nestjs/common';
+import {BadRequestException, ForbiddenException, Injectable, NotFoundException} from '@nestjs/common';
 import {PrismaService} from '../../database/prisma.service';
-import {CreateInvoiceDto, ManualPaymentDto, SubscribeDto, TopUpDto} from './dto/billing.dto';
-import {InvoiceStatus, InvoiceType, PaymentStatus} from '@prisma/client';
-import * as crypto from 'crypto';
+import {CheckoutInvoiceDto, CreateInvoiceDto, ManualPaymentDto, SubscribeDto, TopUpDto} from './dto/billing.dto';
+import {InvoiceStatus, InvoiceType, MembershipStatus, PaymentMethod, PaymentStatus} from '@prisma/client';
 
 @Injectable()
 export class BillingService {
@@ -47,7 +46,6 @@ export class BillingService {
             if (!invoice) throw new NotFoundException('Invoice not found.');
             if (invoice.status === InvoiceStatus.PAID) throw new BadRequestException('Invoice already settled.');
 
-            // 1. Create the Payment Record
             const payment = await tx.payment.create({
                 data: {
                     invoiceId: dto.invoiceId,
@@ -58,13 +56,11 @@ export class BillingService {
                 }
             });
 
-            // 2. Update Invoice Status
             await tx.invoice.update({
                 where: { id: dto.invoiceId },
                 data: { status: InvoiceStatus.PAID }
             });
 
-            // 3. Log to Immutable Ledger (AuditLog)
             await tx.auditLog.create({
                 data: {
                     tenantId,
@@ -80,37 +76,66 @@ export class BillingService {
         });
     }
 
-    async handleGatewayWebhook(payload: any) {
-        // Implementation for PayHere/DirectPay signature validation logic goes here
-        // CRITICAL: Check gatewayTxId in the payments table to ensure idempotency
-        return { status: 'acknowledged' };
+    // ====================================================================
+    // 🚀 DEMO MODE LOGIC (Instant Webhook Bypass)
+    // ====================================================================
+
+    /**
+     * Completes the admin onboarding flow (User pays their pending activation invoice)
+     */
+    async payExistingInvoiceDemo(tenantId: string, userId: string, dto: CheckoutInvoiceDto) {
+        const membership = await this.prisma.membership.findUnique({where: {userId_tenantId: {userId, tenantId}}});
+        if (!membership) throw new NotFoundException('Membership not found.');
+
+        const invoice = await this.prisma.invoice.findFirst({
+            where: {id: dto.invoiceId, tenantId, membershipId: membership.id},
+            include: {membership: {include: {activePlan: true}}}
+        });
+
+        if (!invoice) throw new NotFoundException('Invoice not found.');
+        if (invoice.status === InvoiceStatus.PAID) throw new BadRequestException('Invoice is already paid.');
+
+        // 1. Simulate gateway success
+        await this.processDemoPayment(tenantId, invoice.id);
+
+        // 2. If this was an activation invoice, flip them to active and grant tokens
+        if (invoice.membership.status === MembershipStatus.PENDING) {
+            const plan = invoice.membership.activePlan;
+            await this.prisma.membership.update({
+                where: {id: membership.id},
+                data: {
+                    status: MembershipStatus.ACTIVE,
+                    tokensLeft: {increment: plan?.sessionTokens || 0},
+                    expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
+                }
+            });
+        }
+
+        return {success: true, message: 'Payment processed successfully (Demo Mode).'};
     }
 
-    // ====================================================================
-    // 🚀 NEW: Dynamic Checkout & Subscription Logic
-    // ====================================================================
-
-    async generateSubscriptionCheckout(tenantId: string, userId: string, dto: SubscribeDto) {
+    /**
+     * Self-serve plan upgrades
+     */
+    async generateSubscriptionCheckoutDemo(tenantId: string, userId: string, dto: SubscribeDto) {
         const tenant = await this.prisma.tenant.findUnique({where: {id: tenantId}});
         const membership = await this.prisma.membership.findUnique({where: {userId_tenantId: {userId, tenantId}}});
         const plan = await this.prisma.plan.findUnique({where: {id: dto.planId, tenantId}});
 
-        if (!tenant || !membership || !plan) {
-            throw new NotFoundException('Required resources not found.');
+        if (!tenant || !membership || !plan) throw new NotFoundException('Required resources not found.');
+
+        // 🚀 Enforce Self-Service Rule
+        const businessRules = tenant.businessRules as any || {};
+        if (businessRules.allowSelfService === false) {
+            throw new ForbiddenException('Self-service plan purchases are disabled for this facility. Please contact the front desk.');
         }
 
-        const gatewayKeys = tenant.gatewayKeys as any;
-        if (!gatewayKeys?.payhereMerchantId || !gatewayKeys?.payhereSecret) {
-            throw new BadRequestException('This facility has not configured a payment gateway.');
-        }
-
-        // Calculate basic tax (e.g., extracting from JSON config)
         const taxRules = tenant.taxRules as any || {vatPercentage: 0};
         const subtotal = Number(plan.monthlyPrice);
         const taxAmount = subtotal * ((taxRules.vatPercentage || 0) / 100);
         const totalAmount = subtotal + taxAmount;
 
-        // Create Pending Invoice
+        // 1. Create Invoice
         const invoice = await this.prisma.invoice.create({
             data: {
                 tenantId,
@@ -127,25 +152,27 @@ export class BillingService {
             }
         });
 
-        // Generate Security Hash for UI Handshake
-        const hash = this.generateGatewayHash(
-            gatewayKeys.payhereMerchantId,
-            invoice.id,
-            totalAmount,
-            'LKR',
-            gatewayKeys.payhereSecret
-        );
+        // 2. Simulate gateway success
+        await this.processDemoPayment(tenantId, invoice.id);
 
-        return {
-            invoiceId: invoice.id,
-            merchantId: gatewayKeys.payhereMerchantId,
-            amount: parseFloat(totalAmount.toString()).toFixed(2),
-            currency: 'LKR',
-            hash
-        };
+        // 3. Update Membership instantly
+        await this.prisma.membership.update({
+            where: {id: membership.id},
+            data: {
+                status: MembershipStatus.ACTIVE,
+                activePlanId: plan.id,
+                tokensLeft: {increment: plan.sessionTokens},
+                expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
+            }
+        });
+
+        return {success: true, message: 'Subscription activated successfully (Demo Mode).'};
     }
 
-    async generateTopUpCheckout(tenantId: string, userId: string, dto: TopUpDto) {
+    /**
+     * Self-serve token top-ups
+     */
+    async generateTopUpCheckoutDemo(tenantId: string, userId: string, dto: TopUpDto) {
         const tenant = await this.prisma.tenant.findUnique({where: {id: tenantId}});
         const membership = await this.prisma.membership.findUnique({where: {userId_tenantId: {userId, tenantId}}});
 
@@ -156,15 +183,10 @@ export class BillingService {
             throw new BadRequestException('This facility does not allow manual token top-ups.');
         }
 
-        const gatewayKeys = tenant.gatewayKeys as any;
-        if (!gatewayKeys?.payhereMerchantId || !gatewayKeys?.payhereSecret) {
-            throw new BadRequestException('This facility has not configured a payment gateway.');
-        }
-
-        // Calculate Token Price (Defaulting to 1000 LKR per token if not configured)
         const pricePerToken = businessRules.tokenPrice || 1000;
         const totalAmount = dto.tokenAmount * pricePerToken;
 
+        // 1. Create Invoice
         const invoice = await this.prisma.invoice.create({
             data: {
                 tenantId,
@@ -178,21 +200,42 @@ export class BillingService {
             }
         });
 
-        const hash = this.generateGatewayHash(
-            gatewayKeys.payhereMerchantId,
-            invoice.id,
-            totalAmount,
-            'LKR',
-            gatewayKeys.payhereSecret
-        );
+        // 2. Simulate gateway success
+        await this.processDemoPayment(tenantId, invoice.id);
 
-        return {
-            invoiceId: invoice.id,
-            merchantId: gatewayKeys.payhereMerchantId,
-            amount: parseFloat(totalAmount.toString()).toFixed(2),
-            currency: 'LKR',
-            hash
-        };
+        // 3. Grant tokens instantly
+        await this.prisma.membership.update({
+            where: {id: membership.id},
+            data: {tokensLeft: {increment: dto.tokenAmount}}
+        });
+
+        return {success: true, message: `Purchased ${dto.tokenAmount} tokens successfully (Demo Mode).`};
+    }
+
+    /**
+     * Reusable helper to fake a successful gateway response
+     */
+    private async processDemoPayment(tenantId: string, invoiceId: string) {
+        const invoice = await this.prisma.invoice.findUnique({where: {id: invoiceId, tenantId}});
+        if (!invoice) throw new NotFoundException('Invoice not found.');
+        if (invoice.status === InvoiceStatus.PAID) return true;
+
+        await this.prisma.payment.create({
+            data: {
+                invoiceId,
+                amount: invoice.totalAmount,
+                method: PaymentMethod.PAYHERE, // Simulating an online gateway payment
+                status: PaymentStatus.SUCCESS,
+                gatewayTxId: `DEMO_TX_${Date.now()}`
+            }
+        });
+
+        await this.prisma.invoice.update({
+            where: {id: invoiceId},
+            data: {status: InvoiceStatus.PAID}
+        });
+
+        return true;
     }
 
     async cancelSubscription(tenantId: string, userId: string) {
@@ -207,18 +250,6 @@ export class BillingService {
             data: {autoRenewEnabled: false}
         });
 
-        // Optional: Dispatch call to Gateway (e.g., PayHere/Stripe) to cancel tokenized mandate here.
-
         return {message: 'Auto-renewal disabled successfully.'};
-    }
-
-    /**
-     * Helper function to generate a PayHere compliant MD5 Hash
-     */
-    private generateGatewayHash(merchantId: string, orderId: string, amount: number, currency: string, merchantSecret: string): string {
-        const amountFormatted = parseFloat(amount.toString()).toFixed(2);
-        const hashedSecret = crypto.createHash('md5').update(merchantSecret).digest('hex').toUpperCase();
-        const rawString = `${merchantId}${orderId}${amountFormatted}${currency}${hashedSecret}`;
-        return crypto.createHash('md5').update(rawString).digest('hex').toUpperCase();
     }
 }

@@ -2,7 +2,8 @@
 import {Body, Controller, Get, Headers, Patch, Post, Query, UseGuards} from '@nestjs/common';
 import {ApiBearerAuth, ApiOperation, ApiTags} from '@nestjs/swagger';
 import {BillingService} from './billing.service';
-import {CreateInvoiceDto, ManualPaymentDto, SubscribeDto, TopUpDto} from './dto/billing.dto';
+// Ensure you create and export CheckoutInvoiceDto { @IsUUID() invoiceId: string; } in your dto file
+import {CheckoutInvoiceDto, CreateInvoiceDto, ManualPaymentDto, SubscribeDto, TopUpDto} from './dto/billing.dto';
 import {SessionAuthGuard} from '../../common/guards/session-auth.guard';
 import {RolesGuard} from '../../common/guards/roles.guard';
 import {Roles} from '../../common/decorators/roles.decorator';
@@ -30,7 +31,6 @@ export class BillingController {
         @CurrentUser() user: any,
         @Query('membershipId') membershipId?: string
     ) {
-        // MEMBERS can only see their own invoices
         const targetId = user.globalRole !== 'SYSTEM_ADMIN' && !user.tenantRoles?.[tenantId] ? user.id : membershipId;
         return this.billingService.getInvoices(tenantId, targetId);
     }
@@ -47,40 +47,47 @@ export class BillingController {
         return this.billingService.processManualPayment(tenantId, dto, user.id);
     }
 
-    @Post('payments/webhook')
-    @ApiOperation({summary: 'Unauthenticated gateway webhook'})
-    async gatewayWebhook(@Body() payload: any) {
-        return this.billingService.handleGatewayWebhook(payload);
-    }
+    // ====================================================================
+    // 🚀 DEMO MODE: Dynamic Checkout & Subscription Endpoints
+    // All endpoints instantly resolve as successful payments for the demo.
+    // ====================================================================
 
-    // ====================================================================
-    // 🚀 NEW: Dynamic Checkout & Subscription Endpoints
-    // ====================================================================
+    @Post('checkout/invoice')
+    @UseGuards(SessionAuthGuard) // Any authenticated user can pay an invoice assigned to them
+    @ApiBearerAuth('Bearer-auth')
+    @ApiOperation({summary: 'DEMO: Pay an existing open invoice (e.g., Onboarding/Activation)'})
+    async payExistingInvoice(
+        @Headers('X-Tenant-ID') tenantId: string,
+        @Body() dto: CheckoutInvoiceDto,
+        @CurrentUser() user: any
+    ) {
+        return this.billingService.payExistingInvoiceDemo(tenantId, user.id, dto);
+    }
 
     @Post('checkout/subscribe')
     @UseGuards(SessionAuthGuard, RolesGuard)
     @Roles('MEMBER')
     @ApiBearerAuth('Bearer-auth')
-    @ApiOperation({summary: 'Generate a payment gateway checkout hash for a new subscription'})
+    @ApiOperation({summary: 'DEMO: Instantly purchase and activate a new subscription'})
     async subscribe(
         @Headers('X-Tenant-ID') tenantId: string,
         @Body() dto: SubscribeDto,
         @CurrentUser() user: any
     ) {
-        return this.billingService.generateSubscriptionCheckout(tenantId, user.id, dto);
+        return this.billingService.generateSubscriptionCheckoutDemo(tenantId, user.id, dto);
     }
 
     @Post('checkout/top-up')
     @UseGuards(SessionAuthGuard, RolesGuard)
     @Roles('MEMBER')
     @ApiBearerAuth('Bearer-auth')
-    @ApiOperation({summary: 'Generate a payment gateway checkout hash for a token top-up'})
+    @ApiOperation({summary: 'DEMO: Instantly purchase and grant tokens'})
     async topUp(
         @Headers('X-Tenant-ID') tenantId: string,
         @Body() dto: TopUpDto,
         @CurrentUser() user: any
     ) {
-        return this.billingService.generateTopUpCheckout(tenantId, user.id, dto);
+        return this.billingService.generateTopUpCheckoutDemo(tenantId, user.id, dto);
     }
 
     @Patch('subscriptions/me/cancel')

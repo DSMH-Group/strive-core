@@ -62,3 +62,11 @@ export class TopUpDto {
     @Min(1)
     tokenAmount: number;
 }
+
+// 🚀 NEW: DTO for paying an existing invoice (like the admin-assigned onboarding plan)
+export class CheckoutInvoiceDto {
+    @ApiProperty({example: 'uuid-invoice-1234', description: 'The UUID of the existing OPEN invoice to pay'})
+    @IsUUID()
+    @IsNotEmpty()
+    invoiceId: string;
+}
