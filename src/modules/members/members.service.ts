@@ -104,6 +104,7 @@ export class MembersService {
     }
 
     async getMemberById(tenantId: string, membershipId: string, currentUser: any) {
+        // 1. Fetch the target membership
         const membership = await this.prisma.membership.findUnique({
             where: {id: membershipId},
             include: {user: true, roles: true, activePlan: true}
@@ -113,20 +114,31 @@ export class MembersService {
             throw new NotFoundException('Membership not found in this environment.');
         }
 
-        // 1. Is the user viewing their own profile?
+        // 2. Is the user viewing their own profile?
         const isSelf = membership.userId === currentUser.id;
 
-        // 2. Is the user staff? Safely parse tenantRoles whether it's an array or string
-        const rawRoles = currentUser.tenantRoles?.[tenantId];
-        const userRoles = Array.isArray(rawRoles) ? rawRoles : (rawRoles ? [rawRoles] : []);
+        // 3. 🚀 BULLETPROOF RBAC CHECK: Look up the requester in the database
+        let isStaff = false;
 
-        const isStaff = userRoles.some((r: string) =>
-            ([Role.ORG_ADMIN, Role.MANAGER, Role.TRAINER] as string[]).includes(r)
-        );
+        if (!isSelf && currentUser.id) {
+            // Find the membership of the person making the API request
+            const requesterMembership = await this.prisma.membership.findFirst({
+                where: {userId: currentUser.id, tenantId: tenantId},
+                include: {roles: true}
+            });
 
-        // 3. Is the user a global platform admin?
+            // Extract their roles safely
+            const requesterRoles = requesterMembership?.roles.map(r => r.role) || [];
+
+            // Check if any of their roles are staff roles
+            isStaff = requesterRoles.some(r =>
+                ([Role.ORG_ADMIN, Role.MANAGER, Role.TRAINER] as string[]).includes(r)
+            );
+        }
+
         const isGlobalAdmin = currentUser.isGlobalAdmin === true;
 
+        // 4. Final Verdict
         if (!isSelf && !isStaff && !isGlobalAdmin) {
             throw new ForbiddenException('You do not have permission to view this profile.');
         }
@@ -135,8 +147,15 @@ export class MembersService {
     }
 
     async updateMembership(tenantId: string, membershipId: string, dto: UpdateMembershipDto) {
-        // Fake a valid staff role array to pass the internal authorization check
-        await this.getMemberById(tenantId, membershipId, {tenantRoles: {[tenantId]: [Role.ORG_ADMIN]}});
+        // Note: We don't need to do double RBAC here because the `@Roles('ORG_ADMIN', 'MANAGER')`
+        // guard on the controller already protects this endpoint at the door.
+
+        // Just verify the target membership exists in this tenant
+        const membership = await this.prisma.membership.findUnique({where: {id: membershipId}});
+
+        if (!membership || membership.tenantId !== tenantId) {
+            throw new NotFoundException('Membership not found.');
+        }
 
         return this.prisma.membership.update({
             where: {id: membershipId},
