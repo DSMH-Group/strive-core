@@ -13,11 +13,9 @@ export class MembersService {
     }
 
     async createMembership(tenantId: string, dto: CreateMembershipDto) {
-        // 1. Ensure the Global User exists
         const user = await this.prisma.user.findUnique({where: {id: dto.userId}});
         if (!user) throw new NotFoundException('Global user not found.');
 
-        // 2. Check for existing membership
         const existing = await this.prisma.membership.findUnique({
             where: {
                 userId_tenantId: {userId: dto.userId, tenantId}
@@ -41,12 +39,11 @@ export class MembersService {
             });
         }
 
-        // 3. Brand New Member Flow (No existing membership)
         return this.prisma.membership.create({
             data: {
                 tenantId,
                 userId: dto.userId,
-                rfidTag: dto.rfidTag, // Link hardware immediately
+                rfidTag: dto.rfidTag,
                 status: MembershipStatus.PENDING,
                 roles: {
                     create: {
@@ -116,11 +113,21 @@ export class MembersService {
             throw new NotFoundException('Membership not found in this environment.');
         }
 
+        // 1. Is the user viewing their own profile?
         const isSelf = membership.userId === currentUser.id;
-        const isTenantAdmin = currentUser.tenantRoles?.[tenantId] === Role.ORG_ADMIN ||
-            currentUser.tenantRoles?.[tenantId] === Role.MANAGER;
 
-        if (!isSelf && !isTenantAdmin) {
+        // 2. Is the user staff? Safely parse tenantRoles whether it's an array or string
+        const rawRoles = currentUser.tenantRoles?.[tenantId];
+        const userRoles = Array.isArray(rawRoles) ? rawRoles : (rawRoles ? [rawRoles] : []);
+
+        const isStaff = userRoles.some((r: string) =>
+            ([Role.ORG_ADMIN, Role.MANAGER, Role.TRAINER] as string[]).includes(r)
+        );
+
+        // 3. Is the user a global platform admin?
+        const isGlobalAdmin = currentUser.isGlobalAdmin === true;
+
+        if (!isSelf && !isStaff && !isGlobalAdmin) {
             throw new ForbiddenException('You do not have permission to view this profile.');
         }
 
@@ -128,7 +135,8 @@ export class MembersService {
     }
 
     async updateMembership(tenantId: string, membershipId: string, dto: UpdateMembershipDto) {
-        await this.getMemberById(tenantId, membershipId, {tenantRoles: {[tenantId]: Role.ORG_ADMIN}});
+        // Fake a valid staff role array to pass the internal authorization check
+        await this.getMemberById(tenantId, membershipId, {tenantRoles: {[tenantId]: [Role.ORG_ADMIN]}});
 
         return this.prisma.membership.update({
             where: {id: membershipId},
@@ -182,7 +190,7 @@ export class MembersService {
                 email: dto.email,
                 phone: dto.phone,
                 role: dto.initialRole,
-                planId: dto.planId, // 🚀 NEW: Save the admin's plan selection
+                planId: dto.planId,
                 status: InvitationStatus.PENDING,
                 expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
             }
@@ -203,31 +211,26 @@ export class MembersService {
         }
     }
 
-    // 🚀 NEW: The logic that fires when a user clicks the magic link and creates their account
     async acceptInvitation(userId: string, inviteId: string) {
         const invite = await this.prisma.tenantInvitation.findUnique({
             where: {id: inviteId},
-            include: {plan: true} // Need plan details for the invoice
+            include: {plan: true}
         });
 
         if (!invite) throw new NotFoundException('Invitation not found.');
         if (invite.status !== InvitationStatus.PENDING) throw new ConflictException('Invitation is no longer valid or has already been claimed.');
         if (invite.expiresAt < new Date()) throw new ConflictException('Invitation has expired.');
 
-        // Use a transaction to ensure both membership and invoice are created safely
         return this.prisma.$transaction(async (tx) => {
-            // 1. Mark invite as CLAIMED
             await tx.tenantInvitation.update({
                 where: {id: inviteId},
                 data: {status: InvitationStatus.CLAIMED}
             });
 
-            // 2. Create the Membership
             const membership = await tx.membership.create({
                 data: {
                     userId,
                     tenantId: invite.tenantId,
-                    // If a plan is attached, lock them in PENDING until they pay. Otherwise, activate immediately.
                     status: invite.planId ? MembershipStatus.PENDING : MembershipStatus.ACTIVE,
                     activePlanId: invite.planId || null,
                     roles: {
@@ -237,14 +240,13 @@ export class MembersService {
                 include: {user: true, roles: true, activePlan: true}
             });
 
-            // 3. Create the OPEN invoice if a plan was assigned
             if (invite.planId && invite.plan) {
                 await tx.invoice.create({
                     data: {
                         tenantId: invite.tenantId,
                         membershipId: membership.id,
                         type: InvoiceType.SUBSCRIPTION,
-                        status: InvoiceStatus.OPEN, // 🚀 Prompts the "Pay to Activate" UI
+                        status: InvoiceStatus.OPEN,
                         totalAmount: invite.plan.monthlyPrice,
                         dueDate: new Date(),
                         items: {
@@ -272,7 +274,6 @@ export class MembersService {
         const invite = await this.prisma.tenantInvitation.findUnique({where: {id: inviteId}});
         if (!invite || invite.tenantId !== tenantId) throw new NotFoundException('Invite not found.');
 
-        // Transitioning status to REVOKED instead of hard deleting (better for audits)
         return this.prisma.tenantInvitation.update({
             where: {id: inviteId},
             data: {status: InvitationStatus.REVOKED}
