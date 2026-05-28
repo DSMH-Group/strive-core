@@ -169,6 +169,7 @@ export class MembersService {
     }
 
     async inviteUser(tenantId: string, dto: CreateInvitationDto) {
+        // 1. Check if the user exists globally
         const existingUser = await this.prisma.user.findFirst({
             where: {
                 OR: [
@@ -178,16 +179,7 @@ export class MembersService {
             }
         });
 
-        if (existingUser) {
-            const membership = await this.createMembership(tenantId, {
-                userId: existingUser.id,
-                initialRole: dto.initialRole,
-                rfidTag: ''
-            });
-            this.dispatchNotifications(dto.email, dto.phone, 'ADDED_TO_TENANT', tenantId);
-            return { message: 'User already existed globally and was linked automatically.', membership };
-        }
-
+        // 2. Fetch tenant details for the notification routing domain
         const tenant = await this.prisma.tenant.findUnique({
             where: {id: tenantId},
             select: {domain: true, slug: true}
@@ -197,6 +189,7 @@ export class MembersService {
             ? tenant.domain
             : `${tenant?.slug || tenant?.domain}.dsmhgroup.com`;
 
+        // 3. Always create an invitation (do not auto-add to membership)
         const pendingInvite = await this.prisma.tenantInvitation.create({
             data: {
                 tenantId,
@@ -204,13 +197,28 @@ export class MembersService {
                 phone: dto.phone,
                 role: dto.initialRole,
                 status: 'PENDING',
-                expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
+                expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+                // Optional: If your schema allows tracking who the invite belongs to upfront
+                // userId: existingUser?.id || null
             }
         });
 
-        this.dispatchNotifications(dto.email, dto.phone, 'INVITATION_SENT', tenantId, pendingInvite.id, routingDomain);
-
-        return { message: 'Invitation sent successfully.', pendingInvite };
+        // 4. Dispatch notifications based on whether they are an existing user or new
+        if (existingUser) {
+            // Notify them that a gym wants them to join
+            this.dispatchNotifications(dto.email, dto.phone, 'INVITATION_RECEIVED', tenantId, pendingInvite.id, routingDomain);
+            return {
+                message: 'Invitation sent to existing user. Awaiting their acceptance.',
+                pendingInvite
+            };
+        } else {
+            // Notify a brand new user to create an account and join
+            this.dispatchNotifications(dto.email, dto.phone, 'INVITATION_SENT', tenantId, pendingInvite.id, routingDomain);
+            return {
+                message: 'Invitation sent successfully to new user.',
+                pendingInvite
+            };
+        }
     }
 
     private async dispatchNotifications(
