@@ -58,12 +58,12 @@ export class MembersService {
         });
     }
 
-    async getMyMembership(tenantId: string, keycloakId: string) {
+    async getMyMembership(tenantId: string, id: string) {
         const membership = await this.prisma.membership.findFirst({
             where: {
                 tenantId: tenantId,
                 user: {
-                    keycloakId: keycloakId
+                    id: id
                 }
             },
             include: {
