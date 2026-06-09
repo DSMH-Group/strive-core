@@ -27,11 +27,15 @@ export class BillingService {
         });
     }
 
-    async getInvoices(tenantId: string, membershipId?: string) {
+    async getInvoices(tenantId: string, filter: { userId?: string; membershipId?: string } = {}) {
         return this.prisma.invoice.findMany({
             where: {
                 tenantId,
-                ...(membershipId && { membershipId })
+                // If the admin passes a specific membership ID, query it directly
+                ...(filter.membershipId && {membershipId: filter.membershipId}),
+
+                // 🚀 NEW: If it's a standard user, use Prisma's relational filtering to match the User ID inside the Membership
+                ...(filter.userId && {membership: {userId: filter.userId}})
             },
             include: { items: true, payments: true },
             orderBy: { createdAt: 'desc' }

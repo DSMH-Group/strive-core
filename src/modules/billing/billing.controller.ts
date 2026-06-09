@@ -29,10 +29,17 @@ export class BillingController {
     async getInvoices(
         @Headers('X-Tenant-ID') tenantId: string,
         @CurrentUser() user: any,
-        @Query('membershipId') membershipId?: string
+        @Query('membershipId') requestedMembershipId?: string
     ) {
-        const targetId = user.globalRole !== 'SYSTEM_ADMIN' && !user.tenantRoles?.[tenantId] ? user.id : membershipId;
-        return this.billingService.getInvoices(tenantId, targetId);
+        const isAdmin = user.globalRole === 'SYSTEM_ADMIN' || !!user.tenantRoles?.[tenantId];
+
+        if (isAdmin) {
+            // Admins can see all tenant invoices, or filter by a specific member's invoice ledger
+            return this.billingService.getInvoices(tenantId, {membershipId: requestedMembershipId});
+        } else {
+            // Standard members can ONLY see their own invoices
+            return this.billingService.getInvoices(tenantId, {userId: user.id});
+        }
     }
 
     @Post('payments/manual')
