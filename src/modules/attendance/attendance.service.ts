@@ -1,8 +1,8 @@
 // src/modules/attendance/attendance.service.ts
-import { Injectable, NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
-import { CreateAttendanceDto, UpdateAttendanceDto, AuthMethod } from './dto/attendance.dto';
-import { MembershipStatus } from '@prisma/client';
-import { TenantPrismaService } from '../../database/tenant-prisma.service';
+import {ForbiddenException, Injectable, NotFoundException} from '@nestjs/common';
+import {CreateAttendanceDto, UpdateAttendanceDto} from './dto/attendance.dto';
+import {MembershipStatus} from '@prisma/client';
+import {TenantPrismaService} from '../../database/tenant-prisma.service';
 
 @Injectable()
 export class AttendanceService {
@@ -63,16 +63,35 @@ export class AttendanceService {
         });
     }
 
-    async getHistory(startDate?: string, endDate?: string) {
+    async getHistory(tenantId: string, filter: {
+        startDate?: string;
+        endDate?: string;
+        membershipId?: string;
+        userId?: string
+    }) {
         return this.tenantPrisma.client.attendance.findMany({
             where: {
-                checkInTime: {
-                    ...(startDate && { gte: new Date(startDate) }),
-                    ...(endDate && { lte: new Date(endDate) }),
-                }
-                // tenantId is injected automatically here!
+                // 🏢 tenantId is injected automatically by your tenantPrisma client extension
+
+                // 🎯 Admin filtering by a specific membership
+                ...(filter.membershipId && {membershipId: filter.membershipId}),
+
+                // 🔒 Standard member filtering (walks the relationship up to the User table)
+                ...(filter.userId && {membership: {userId: filter.userId}}),
+
+                // 📅 Date range filtering
+                ...((filter.startDate || filter.endDate) ? {
+                    checkInTime: {
+                        ...(filter.startDate && {gte: new Date(filter.startDate)}),
+                        ...(filter.endDate && {lte: new Date(filter.endDate)}),
+                    }
+                } : {})
             },
-            include: { membership: { include: { user: true } } },
+            include: {
+                membership: {
+                    include: {user: true}
+                }
+            },
             orderBy: { checkInTime: 'desc' }
         });
     }
