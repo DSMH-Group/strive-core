@@ -1,8 +1,8 @@
 // src/modules/billing/billing.controller.ts
-import {Body, Controller, Get, Headers, Patch, Post, Query, UseGuards} from '@nestjs/common';
+import {Body, Controller, Get, Headers, HttpCode, HttpStatus, Patch, Post, Query, Res, UseGuards} from '@nestjs/common';
 import {ApiBearerAuth, ApiOperation, ApiTags} from '@nestjs/swagger';
+import type {Response} from 'express';
 import {BillingService} from './billing.service';
-// Ensure you create and export CheckoutInvoiceDto { @IsUUID() invoiceId: string; } in your dto file
 import {CheckoutInvoiceDto, CreateInvoiceDto, ManualPaymentDto, SubscribeDto, TopUpDto} from './dto/billing.dto';
 import {SessionAuthGuard} from '../../common/guards/session-auth.guard';
 import {RolesGuard} from '../../common/guards/roles.guard';
@@ -48,46 +48,45 @@ export class BillingController {
     }
 
     // ====================================================================
-    // 🚀 DEMO MODE: Dynamic Checkout & Subscription Endpoints
-    // All endpoints instantly resolve as successful payments for the demo.
+    // 🚀 PAYHERE CHECKOUT INITIALIZATION ENDPOINTS
     // ====================================================================
 
     @Post('checkout/invoice')
-    @UseGuards(SessionAuthGuard) // Any authenticated user can pay an invoice assigned to them
+    @UseGuards(SessionAuthGuard)
     @ApiBearerAuth('Bearer-auth')
-    @ApiOperation({summary: 'DEMO: Pay an existing open invoice (e.g., Onboarding/Activation)'})
+    @ApiOperation({summary: 'Generate PayHere payload for an existing open invoice'})
     async payExistingInvoice(
         @Headers('X-Tenant-ID') tenantId: string,
         @Body() dto: CheckoutInvoiceDto,
         @CurrentUser() user: any
     ) {
-        return this.billingService.payExistingInvoiceDemo(tenantId, user.id, dto);
+        return this.billingService.generateExistingInvoiceCheckout(tenantId, user.id, dto);
     }
 
     @Post('checkout/subscribe')
     @UseGuards(SessionAuthGuard, RolesGuard)
     @Roles('MEMBER')
     @ApiBearerAuth('Bearer-auth')
-    @ApiOperation({summary: 'DEMO: Instantly purchase and activate a new subscription'})
+    @ApiOperation({summary: 'Generate PayHere payload for a new subscription'})
     async subscribe(
         @Headers('X-Tenant-ID') tenantId: string,
         @Body() dto: SubscribeDto,
         @CurrentUser() user: any
     ) {
-        return this.billingService.generateSubscriptionCheckoutDemo(tenantId, user.id, dto);
+        return this.billingService.generateSubscriptionCheckout(tenantId, user.id, dto);
     }
 
     @Post('checkout/top-up')
     @UseGuards(SessionAuthGuard, RolesGuard)
     @Roles('MEMBER')
     @ApiBearerAuth('Bearer-auth')
-    @ApiOperation({summary: 'DEMO: Instantly purchase and grant tokens'})
+    @ApiOperation({summary: 'Generate PayHere payload for token purchases'})
     async topUp(
         @Headers('X-Tenant-ID') tenantId: string,
         @Body() dto: TopUpDto,
         @CurrentUser() user: any
     ) {
-        return this.billingService.generateTopUpCheckoutDemo(tenantId, user.id, dto);
+        return this.billingService.generateTopUpCheckout(tenantId, user.id, dto);
     }
 
     @Patch('subscriptions/me/cancel')
@@ -100,5 +99,21 @@ export class BillingController {
         @CurrentUser() user: any
     ) {
         return this.billingService.cancelSubscription(tenantId, user.id);
+    }
+
+    // ====================================================================
+    // 🚀 PAYHERE WEBHOOK LISTENER
+    // ====================================================================
+
+    @Post('webhook/payhere')
+    @HttpCode(HttpStatus.OK)
+    @ApiOperation({summary: 'PayHere Server-to-Server Webhook Listener'})
+    async handlePayHereWebhook(@Body() body: any, @Res() res: Response) {
+        // Run asynchronously to immediately return 200 OK to PayHere to prevent retries
+        this.billingService.handlePayHereWebhook(body).catch((err) => {
+            console.error('Error processing PayHere webhook:', err);
+        });
+
+        return res.status(HttpStatus.OK).send();
     }
 }
