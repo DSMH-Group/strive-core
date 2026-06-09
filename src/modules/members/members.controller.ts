@@ -124,9 +124,9 @@ export class MembersController {
 
     @Patch(':id')
     @Roles('ORG_ADMIN', 'MANAGER')
-    @ApiOperation({summary: 'Update member role or status'})
+    @ApiOperation({summary: 'Update membership identity, plan bindings, token counters, and core lifecycle status.'})
     @ApiParam({name: 'id', type: 'string', description: 'UUID of the membership'})
-    @ApiResponse({status: HttpStatus.OK, description: 'Membership updated.'})
+    @ApiResponse({status: HttpStatus.OK, description: 'Membership configurations updated across schema structures.'})
     async updateMembership(
         @Headers('X-Tenant-ID') tenantId: string,
         @Param('id') id: string,

@@ -20,42 +20,47 @@ export class CreateMembershipDto {
     rfidTag?: string;
 }
 
+// src/modules/members/dto/members.dto.ts
+
 export class UpdateMembershipDto {
     @ApiPropertyOptional({ enum: MembershipStatus })
     @IsEnum(MembershipStatus)
     @IsOptional()
     status?: MembershipStatus;
 
-    // 🚀 NEW: Expose Token Wallet for manual admin adjustments
     @ApiPropertyOptional({example: 10, description: 'Manually override token balance'})
     @IsInt()
     @Min(0)
     @IsOptional()
     tokensLeft?: number;
 
-    // 🚀 NEW: Expose Plan Assignment for manual overrides
-    @ApiPropertyOptional({example: 'uuid-plan-1234', description: 'Manually assign or change an active plan'})
+    @ApiPropertyOptional({
+        example: 'uuid-plan-1234',
+        description: 'Manually assign, change, or nullify an active plan',
+        nullable: true
+    })
     @IsUUID()
     @IsOptional()
-    activePlanId?: string;
+    activePlanId?: string | null; // 👈 Allow explicit null from frontend
 
-    // 🚀 NEW: Expose Auto-Renew toggle
     @ApiPropertyOptional({example: true, description: 'Toggle auto-renew status'})
     @IsBoolean()
     @IsOptional()
     autoRenewEnabled?: boolean;
 
-    // 🚀 NEW: Expose Expiration Date for manual extensions
     @ApiPropertyOptional({example: '2026-06-15T00:00:00Z', description: 'Manually set expiration date'})
     @IsDateString()
     @IsOptional()
     expiresAt?: string;
 
-    // 🚀 NEW: Allow updating the physical keyfob/RFID tag if lost
-    @ApiPropertyOptional({example: 'RFID-9999', description: 'Assign or update hardware RFID tag'})
+    @ApiPropertyOptional({
+        example: 'RFID-9999',
+        description: 'Assign, update, or remove hardware RFID tag',
+        nullable: true
+    })
     @IsString()
     @IsOptional()
-    rfidTag?: string;
+    rfidTag?: string | null; // 👈 Allow explicit null from frontend
 }
 
 export class TransitionMembershipDto {

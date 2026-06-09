@@ -147,20 +147,35 @@ export class MembersService {
     }
 
     async updateMembership(tenantId: string, membershipId: string, dto: UpdateMembershipDto) {
-        // Note: We don't need to do double RBAC here because the `@Roles('ORG_ADMIN', 'MANAGER')`
-        // guard on the controller already protects this endpoint at the door.
-
-        // Just verify the target membership exists in this tenant
-        const membership = await this.prisma.membership.findUnique({where: {id: membershipId}});
+        // 1. Verify target context scope exists inside isolation boundaries
+        const membership = await this.prisma.membership.findUnique({
+            where: {id: membershipId}
+        });
 
         if (!membership || membership.tenantId !== tenantId) {
-            throw new NotFoundException('Membership not found.');
+            throw new NotFoundException('Membership context mapping not found within this tenant.');
         }
 
+        // 2. Map payload dynamically into target Prisma configuration
         return this.prisma.membership.update({
             where: {id: membershipId},
-            data: {status: dto.status as MembershipStatus},
-            include: {roles: true, activePlan: true}
+            data: {
+                ...(dto.status && {status: dto.status}),
+                ...(dto.tokensLeft !== undefined && {tokensLeft: dto.tokensLeft}),
+                ...(dto.autoRenewEnabled !== undefined && {autoRenewEnabled: dto.autoRenewEnabled}),
+
+                // Convert incoming ISO string to native Date object for Prisma
+                ...(dto.expiresAt && {expiresAt: new Date(dto.expiresAt)}),
+
+                // If the property is missing entirely (undefined), keep old state.
+                // If it is explicitly passed as null, pass it to Prisma to clear the field.
+                activePlanId: dto.activePlanId === undefined ? membership.activePlanId : dto.activePlanId,
+                rfidTag: dto.rfidTag === undefined ? membership.rfidTag : dto.rfidTag,
+            },
+            include: {
+                roles: true,
+                activePlan: true // Perfect match for frontend mapping expectations
+            }
         });
     }
 
