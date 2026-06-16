@@ -1,18 +1,34 @@
 // src/modules/tenants/dto/update-tenant.dto.ts
 import {ApiPropertyOptional} from '@nestjs/swagger';
-import {IsBoolean, IsHexColor, IsNumber, IsOptional, IsString, IsUrl, ValidateNested} from 'class-validator';
+import {IsBoolean, IsHexColor, IsIn, IsNumber, IsOptional, IsString, IsUrl, ValidateNested} from 'class-validator';
 import {Type} from 'class-transformer';
 
 class ThemeConfigDto {
     @ApiPropertyOptional({example: '#ea580c'})
     @IsOptional()
-    @IsHexColor()
+    @IsHexColor() // Note: You might want @IsString() here instead if users can pass HSL strings later, but for Hex this is perfect.
     primaryColor?: string;
 
     @ApiPropertyOptional({example: 'https://s3.amazonaws.com/logo.png'})
     @IsOptional()
     @IsUrl()
     logoUrl?: string;
+
+    // 🚀 NEW: Added the missing theme properties
+    @ApiPropertyOptional({example: 'dark', description: 'Base application theme'})
+    @IsOptional()
+    @IsIn(['light', 'dark'], {message: 'themeMode must be either light or dark'})
+    themeMode?: 'light' | 'dark';
+
+    @ApiPropertyOptional({example: 0.5, description: 'Base border radius for UI components (rem)'})
+    @IsOptional()
+    @IsNumber()
+    radius?: number;
+
+    @ApiPropertyOptional({example: 'sans', description: 'Tailwind font family token'})
+    @IsOptional()
+    @IsString()
+    fontFamily?: string;
 }
 
 class TaxRulesDto {
@@ -55,7 +71,6 @@ class BusinessRulesDto {
     @IsNumber()
     tokenPrice?: number;
 
-    // 🚀 NEW: Self-Service Toggle
     @ApiPropertyOptional({
         example: false,
         description: 'If false, members cannot buy plans directly; they must be invoiced by an admin.'

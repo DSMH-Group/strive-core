@@ -140,8 +140,11 @@ export class TenantsService {
                         domain: dto.subdomain,
                         slug: generatedSlug,
                         themeConfig: {
-                            primaryColor: '#000000',
-                            logoUrl: null
+                            primaryColor: '#ea580c', // Strive Orange
+                            logoUrl: null,
+                            themeMode: 'dark',
+                            radius: 0.5,
+                            fontFamily: 'sans'
                         } as Prisma.InputJsonObject,
                         // Initialize default business rules upon creation
                         businessRules: {
