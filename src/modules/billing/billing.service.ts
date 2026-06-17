@@ -293,41 +293,49 @@ export class BillingService {
     // 🚀 ASYNCHRONOUS WEBHOOK RECONCILIATION
     // ====================================================================
 
-    private async buildCheckoutPayload(invoice: any, tenant: any, custom1: string = '', custom2: string = '') {
+    async generateCardSetupPayload(tenantId: string, userId: string) {
+        const tenant = await this.prisma.tenant.findUnique({where: {id: tenantId}});
+        const membership = await this.prisma.membership.findUnique({
+            where: {userId_tenantId: {userId, tenantId}},
+            include: {user: true}
+        });
+
+        if (!tenant || !membership) throw new NotFoundException('Resources not found.');
+
         const gatewayKeys = tenant.gatewayKeys as { payhereMerchantId?: string; payhereSecret?: string } | null;
         if (!gatewayKeys?.payhereMerchantId || !gatewayKeys?.payhereSecret) {
-            throw new BadRequestException('Payment gateway is not configured for this facility.');
+            throw new BadRequestException('Payment gateway not configured.');
         }
 
-        const businessRules = tenant.businessRules as any || {};
-        const currency = businessRules.defaultCurrency || 'LKR';
-        const amountStr = Number(invoice.totalAmount).toFixed(2);
+        const currency = (tenant.businessRules as any)?.defaultCurrency || 'LKR';
+        const setupOrderId = `SETUP_${crypto.randomUUID().replace(/-/g, '').substring(0, 10)}`;
 
-        const hash = this.generatePayHereHash(
-            gatewayKeys.payhereMerchantId,
-            gatewayKeys.payhereSecret,
-            invoice.id,
-            amountStr,
-            currency
-        );
+        // 🚀 THE FIX: PayHere strictly requires an amount to be present, even for card setup
+        const amountStr = "0.00";
+
+        const hashedSecret = crypto.createHash('md5').update(gatewayKeys.payhereSecret).digest('hex').toUpperCase();
+
+        // 🚀 THE FIX: The amount MUST be included in the hash calculation
+        const hash = crypto.createHash('md5')
+            .update(gatewayKeys.payhereMerchantId + setupOrderId + amountStr + currency + hashedSecret)
+            .digest('hex').toUpperCase();
 
         return {
-            sandbox: process.env.NODE_ENV !== 'production',
+            sandbox: process.env.PAYHERE_SANDBOX === 'true',
             merchant_id: gatewayKeys.payhereMerchantId,
-            order_id: invoice.id,
-            items: `Invoice - ${invoice.type}`,
-            amount: amountStr,
+            order_id: setupOrderId,
+            items: `Secure Card Setup`,
             currency,
+            amount: amountStr, // 🚀 Inject the 0.00 amount into the payload
             hash,
-            first_name: invoice.membership.user.firstName,
-            last_name: invoice.membership.user.lastName,
-            email: invoice.membership.user.email,
-            phone: invoice.membership.user.phone || '0000000000',
+            first_name: membership.user.firstName,
+            last_name: membership.user.lastName,
+            email: membership.user.email,
+            phone: membership.user.phone || '0000000000',
             address: 'N/A',
             city: 'N/A',
             country: 'Sri Lanka',
-            custom_1: custom1, // Pass contextual data to the webhook
-            custom_2: custom2
+            custom_1: membership.id
         };
     }
 
@@ -371,49 +379,41 @@ export class BillingService {
         return {success: true};
     }
 
-    async generateCardSetupPayload(tenantId: string, userId: string) {
-        const tenant = await this.prisma.tenant.findUnique({where: {id: tenantId}});
-        const membership = await this.prisma.membership.findUnique({
-            where: {userId_tenantId: {userId, tenantId}},
-            include: {user: true}
-        });
-
-        if (!tenant || !membership) throw new NotFoundException('Resources not found.');
-
+    private async buildCheckoutPayload(invoice: any, tenant: any, custom1: string = '', custom2: string = '') {
         const gatewayKeys = tenant.gatewayKeys as { payhereMerchantId?: string; payhereSecret?: string } | null;
         if (!gatewayKeys?.payhereMerchantId || !gatewayKeys?.payhereSecret) {
-            throw new BadRequestException('Payment gateway not configured.');
+            throw new BadRequestException('Payment gateway is not configured for this facility.');
         }
 
-        const currency = (tenant.businessRules as any)?.defaultCurrency || 'LKR';
-        const setupOrderId = `SETUP_${crypto.randomUUID().replace(/-/g, '').substring(0, 10)}`;
+        const businessRules = tenant.businessRules as any || {};
+        const currency = businessRules.defaultCurrency || 'LKR';
+        const amountStr = Number(invoice.totalAmount).toFixed(2);
 
-        // 🚀 THE FIX: PayHere strictly requires an amount to be present, even for card setup
-        const amountStr = "0.00";
-
-        const hashedSecret = crypto.createHash('md5').update(gatewayKeys.payhereSecret).digest('hex').toUpperCase();
-
-        // 🚀 THE FIX: The amount MUST be included in the hash calculation
-        const hash = crypto.createHash('md5')
-            .update(gatewayKeys.payhereMerchantId + setupOrderId + amountStr + currency + hashedSecret)
-            .digest('hex').toUpperCase();
+        const hash = this.generatePayHereHash(
+            gatewayKeys.payhereMerchantId,
+            gatewayKeys.payhereSecret,
+            invoice.id,
+            amountStr,
+            currency
+        );
 
         return {
-            sandbox: process.env.NODE_ENV !== 'production',
+            sandbox: process.env.PAYHERE_SANDBOX === 'true',
             merchant_id: gatewayKeys.payhereMerchantId,
-            order_id: setupOrderId,
-            items: `Secure Card Setup`,
+            order_id: invoice.id,
+            items: `Invoice - ${invoice.type}`,
+            amount: amountStr,
             currency,
-            amount: amountStr, // 🚀 Inject the 0.00 amount into the payload
             hash,
-            first_name: membership.user.firstName,
-            last_name: membership.user.lastName,
-            email: membership.user.email,
-            phone: membership.user.phone || '0000000000',
+            first_name: invoice.membership.user.firstName,
+            last_name: invoice.membership.user.lastName,
+            email: invoice.membership.user.email,
+            phone: invoice.membership.user.phone || '0000000000',
             address: 'N/A',
             city: 'N/A',
             country: 'Sri Lanka',
-            custom_1: membership.id
+            custom_1: custom1, // Pass contextual data to the webhook
+            custom_2: custom2
         };
     }
 
@@ -473,7 +473,7 @@ export class BillingService {
             throw new BadRequestException('Facility is not configured for automated charging. Missing App API Keys.');
         }
 
-        const isSandbox = process.env.NODE_ENV !== 'production';
+        const isSandbox = process.env.PAYHERE_SANDBOX === 'true';
         const baseUrl = isSandbox ? 'https://sandbox.payhere.lk' : 'https://app.payhere.lk';
 
         // 1. Get Access Token
