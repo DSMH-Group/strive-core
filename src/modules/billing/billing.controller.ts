@@ -48,6 +48,8 @@ export class BillingController {
     ) {
         const isAdmin = user.globalRole === 'SYSTEM_ADMIN' || !!user.tenantRoles?.[tenantId];
 
+        console.log("Hi, this is...", isAdmin, user.globalRole, user.tenantRoles, tenantId, requestedMembershipId, requestedUserId,)
+
         if (isAdmin) {
             // 🚀 Admins can filter by either membershipId OR userId
             return this.billingService.getInvoices(tenantId, {
