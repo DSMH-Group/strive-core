@@ -310,7 +310,7 @@ export class BillingService {
         const setupOrderId = `SETUP_${crypto.randomUUID().replace(/-/g, '').substring(0, 10)}`;
 
         // PayHere requires a dummy amount in the JSON to open the UI
-        const amountStr = "0.00";
+        const amountStr = "10.00";
 
         const hashedSecret = crypto.createHash('md5').update(gatewayKeys.payhereSecret).digest('hex').toUpperCase();
 
