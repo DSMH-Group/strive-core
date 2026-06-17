@@ -1,5 +1,19 @@
 // src/modules/billing/billing.controller.ts
-import {Body, Controller, Get, Headers, HttpCode, HttpStatus, Patch, Post, Query, Res, UseGuards} from '@nestjs/common';
+import {
+    Body,
+    Controller,
+    Delete,
+    Get,
+    Headers,
+    HttpCode,
+    HttpStatus,
+    Param,
+    Patch,
+    Post,
+    Query,
+    Res,
+    UseGuards
+} from '@nestjs/common';
 import {ApiBearerAuth, ApiOperation, ApiTags} from '@nestjs/swagger';
 import type {Response} from 'express';
 import {BillingService} from './billing.service';
@@ -121,6 +135,57 @@ export class BillingController {
             console.error('Error processing PayHere webhook:', err);
         });
 
+        return res.status(HttpStatus.OK).send();
+    }
+
+    // ====================================================================
+    // 🚀 SAVED CARDS (TOKENIZATION) ENDPOINTS
+    // ====================================================================
+
+    @Get('cards')
+    @UseGuards(SessionAuthGuard, RolesGuard)
+    @Roles('MEMBER')
+    @ApiBearerAuth('Bearer-auth')
+    @ApiOperation({summary: 'Get saved payment methods'})
+    async getSavedCards(
+        @Headers('X-Tenant-ID') tenantId: string,
+        @CurrentUser() user: any
+    ) {
+        return this.billingService.getSavedCards(tenantId, user.id);
+    }
+
+    @Post('cards/setup')
+    @UseGuards(SessionAuthGuard, RolesGuard)
+    @Roles('MEMBER')
+    @ApiBearerAuth('Bearer-auth')
+    @ApiOperation({summary: 'Generate PayHere Preapproval payload for saving a card'})
+    async setupCard(
+        @Headers('X-Tenant-ID') tenantId: string,
+        @CurrentUser() user: any
+    ) {
+        return this.billingService.generateCardSetupPayload(tenantId, user.id);
+    }
+
+    @Delete('cards/:id')
+    @UseGuards(SessionAuthGuard, RolesGuard)
+    @Roles('MEMBER')
+    @ApiBearerAuth('Bearer-auth')
+    @ApiOperation({summary: 'Remove a saved payment method'})
+    async removeCard(
+        @Headers('X-Tenant-ID') tenantId: string,
+        @CurrentUser() user: any,
+        @Param('id') cardId: string
+    ) {
+        return this.billingService.removeSavedCard(tenantId, user.id, cardId);
+    }
+
+    @Post('webhook/payhere-preapproval')
+    @HttpCode(HttpStatus.OK)
+    @ApiOperation({summary: 'PayHere Server-to-Server Webhook for Preapproval (Card Saving)'})
+    async handlePayHerePreapprovalWebhook(@Body() body: any, @Res() res: Response) {
+        this.billingService.handlePreapprovalWebhook(body).catch((err) => {
+            console.error('Error processing Preapproval webhook:', err);
+        });
         return res.status(HttpStatus.OK).send();
     }
 }

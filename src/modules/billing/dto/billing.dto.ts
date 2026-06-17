@@ -1,6 +1,17 @@
 // src/modules/billing/dto/billing.dto.ts
-import {ApiProperty} from '@nestjs/swagger';
-import {IsArray, IsEnum, IsInt, IsNotEmpty, IsNumber, IsString, IsUUID, Min, ValidateNested} from 'class-validator';
+import {ApiProperty, ApiPropertyOptional} from '@nestjs/swagger';
+import {
+    IsArray,
+    IsEnum,
+    IsInt,
+    IsNotEmpty,
+    IsNumber,
+    IsOptional,
+    IsString,
+    IsUUID,
+    Min,
+    ValidateNested
+} from 'class-validator';
 import {Type} from 'class-transformer';
 import {InvoiceType, PaymentMethod} from '@prisma/client';
 
@@ -54,6 +65,12 @@ export class SubscribeDto {
     @IsUUID()
     @IsNotEmpty()
     planId: string;
+
+    // 🚀 NEW: Optional saved card ID for 1-click charging
+    @ApiPropertyOptional({description: 'The UUID of the saved payment method for 1-click checkout'})
+    @IsOptional()
+    @IsString()
+    cardId?: string;
 }
 
 export class TopUpDto {
@@ -61,12 +78,23 @@ export class TopUpDto {
     @IsInt()
     @Min(1)
     tokenAmount: number;
+
+    // 🚀 NEW: Optional saved card ID for 1-click charging
+    @ApiPropertyOptional({description: 'The UUID of the saved payment method for 1-click checkout'})
+    @IsOptional()
+    @IsString()
+    cardId?: string;
 }
 
-// 🚀 NEW: DTO for paying an existing invoice (like the admin-assigned onboarding plan)
 export class CheckoutInvoiceDto {
     @ApiProperty({example: 'uuid-invoice-1234', description: 'The UUID of the existing OPEN invoice to pay'})
     @IsUUID()
     @IsNotEmpty()
     invoiceId: string;
+
+    // 🚀 NEW: Optional saved card ID for 1-click charging
+    @ApiPropertyOptional({description: 'The UUID of the saved payment method for 1-click checkout'})
+    @IsOptional()
+    @IsString()
+    cardId?: string;
 }

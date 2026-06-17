@@ -26,23 +26,24 @@ model User {
 }
 
 model Tenant {
-  id                String             @id @default(uuid())
-  name              String
-  slug              String             @unique
-  domain            String?            @unique
-  themeConfig       Json?
-  taxRules          Json?
-  gatewayKeys       Json?
-  businessRules Json? // 🚀 NEW: e.g., { "allowTokenTopUps": true, "defaultCurrency": "LKR" }
-  createdAt         DateTime           @default(now())
-  updatedAt         DateTime           @updatedAt
-  tenantInvitations TenantInvitation[]
-  attendances       Attendance[]
-  auditLogs         AuditLog[]
-  invoices          Invoice[]
-  memberships       Membership[]
-  resources         Resource[]
-  plans         Plan[] // 🚀 NEW: Relation to the tenant's product catalog
+  id                  String              @id @default(uuid())
+  name                String
+  slug                String              @unique
+  domain              String?             @unique
+  themeConfig         Json?
+  taxRules            Json?
+  gatewayKeys         Json?
+  businessRules       Json? // 🚀 NEW: e.g., { "allowTokenTopUps": true, "defaultCurrency": "LKR" }
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
+  tenantInvitations   TenantInvitation[]
+  attendances         Attendance[]
+  auditLogs           AuditLog[]
+  invoices            Invoice[]
+  memberships         Membership[]
+  resources           Resource[]
+  plans               Plan[] // 🚀 NEW: Relation to the tenant's product catalog
+  savedPaymentMethods SavedPaymentMethod[]
 
   @@map("tenants")
   @@schema("stride")
@@ -91,9 +92,10 @@ model Membership {
   roles       MembershipRole[]
   metrics     Metric[]
 
-  tenant     Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  user       User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  activePlan Plan?  @relation(fields: [activePlanId], references: [id], onDelete: SetNull) // 🚀 NEW: Link to Plan
+  tenant              Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user                User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  activePlan          Plan?               @relation(fields: [activePlanId], references: [id], onDelete: SetNull) // 🚀 NEW: Link to Plan
+  savedPaymentMethods SavedPaymentMethod[]
 
   @@unique([userId, tenantId])
   @@map("memberships")
@@ -390,6 +392,22 @@ enum InvitationStatus {
   CLAIMED
   REVOKED
   EXPIRED
+
+  @@schema("stride")
+}
+
+model SavedPaymentMethod {
+  id           String   @id @default(cuid())
+  tenantId     String
+  membershipId String
+  payhereToken String // The secret customer_token from PayHere
+  mask         String // e.g., "4242"
+  brand        String // e.g., "VISA"
+  isDefault    Boolean  @default(false)
+  createdAt    DateTime @default(now())
+
+  membership Membership @relation(fields: [membershipId], references: [id])
+  tenant     Tenant     @relation(fields: [tenantId], references: [id])
 
   @@schema("stride")
 }

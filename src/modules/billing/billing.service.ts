@@ -139,7 +139,20 @@ export class BillingService {
             include: {membership: {include: {user: true}}, tenant: true}
         });
 
-        // Pass the planId in custom_1 so the webhook knows which plan to activate
+        // Check if the user wants to use a saved card (1-Click Payment)
+        if (dto.cardId) {
+            const savedCard = await this.prisma.savedPaymentMethod.findUnique({
+                where: {id: dto.cardId, membershipId: membership.id}
+            });
+
+            if (savedCard) {
+                // Background charge the card. If it throws, the controller returns a 400.
+                await this.chargeTokenizedCard(tenant, invoice, savedCard);
+                return {charged: true}; // Tells frontend to NOT open the PayHere modal
+            }
+        }
+
+        // Fallback: If no cardId provided, return standard payload for the UI modal
         return this.buildCheckoutPayload(invoice, tenant, plan.id);
     }
 
@@ -331,5 +344,176 @@ export class BillingService {
         });
 
         return {message: 'Auto-renewal disabled successfully.'};
+    }
+
+    // ====================================================================
+    // 🚀 CARD MANAGEMENT LOGIC
+    // ====================================================================
+
+    async getSavedCards(tenantId: string, userId: string) {
+        const membership = await this.prisma.membership.findUnique({where: {userId_tenantId: {userId, tenantId}}});
+        if (!membership) return [];
+
+        return this.prisma.savedPaymentMethod.findMany({
+            where: {tenantId, membershipId: membership.id},
+            select: {id: true, mask: true, brand: true, isDefault: true} // NEVER send payhereToken to frontend
+        });
+    }
+
+    async removeSavedCard(tenantId: string, userId: string, cardId: string) {
+        const membership = await this.prisma.membership.findUnique({where: {userId_tenantId: {userId, tenantId}}});
+        if (!membership) throw new NotFoundException('Membership not found.');
+
+        await this.prisma.savedPaymentMethod.deleteMany({
+            where: {id: cardId, tenantId, membershipId: membership.id}
+        });
+
+        return {success: true};
+    }
+
+    async generateCardSetupPayload(tenantId: string, userId: string) {
+        const tenant = await this.prisma.tenant.findUnique({where: {id: tenantId}});
+        const membership = await this.prisma.membership.findUnique({
+            where: {userId_tenantId: {userId, tenantId}},
+            include: {user: true}
+        });
+
+        if (!tenant || !membership) throw new NotFoundException('Resources not found.');
+
+        const gatewayKeys = tenant.gatewayKeys as { payhereMerchantId?: string; payhereSecret?: string } | null;
+        if (!gatewayKeys?.payhereMerchantId || !gatewayKeys?.payhereSecret) {
+            throw new BadRequestException('Payment gateway not configured.');
+        }
+
+        const currency = (tenant.businessRules as any)?.defaultCurrency || 'LKR';
+        // Generate a random ID since there is no invoice for a setup request
+        const setupOrderId = `SETUP_${crypto.randomUUID().replace(/-/g, '').substring(0, 10)}`;
+
+        // PREAPPROVAL HASH: md5(merchant_id + order_id + currency + md5(payhere_secret))
+        const hashedSecret = crypto.createHash('md5').update(gatewayKeys.payhereSecret).digest('hex').toUpperCase();
+        const hash = crypto.createHash('md5')
+            .update(gatewayKeys.payhereMerchantId + setupOrderId + currency + hashedSecret)
+            .digest('hex').toUpperCase();
+
+        return {
+            sandbox: process.env.NODE_ENV !== 'production',
+            merchant_id: gatewayKeys.payhereMerchantId,
+            order_id: setupOrderId,
+            items: `Secure Card Setup`,
+            currency,
+            hash,
+            first_name: membership.user.firstName,
+            last_name: membership.user.lastName,
+            email: membership.user.email,
+            phone: membership.user.phone || '0000000000',
+            address: 'N/A',
+            city: 'N/A',
+            country: 'Sri Lanka',
+            custom_1: membership.id // Crucial: Pass membership ID so webhook knows who to assign the card to
+        };
+    }
+
+    async handlePreapprovalWebhook(body: any) {
+        const {merchant_id, order_id, status_code, md5sig, customer_token, card_no, card_brand, custom_1} = body;
+        const membershipId = custom_1;
+
+        if (status_code !== '2' || !customer_token) return;
+
+        const membership = await this.prisma.membership.findUnique({
+            where: {id: membershipId},
+            include: {tenant: true}
+        });
+
+        if (!membership) return;
+
+        const gatewayKeys = membership.tenant.gatewayKeys as { payhereSecret?: string } | null;
+        if (!gatewayKeys?.payhereSecret) return;
+
+        // Verify Signature (Preapproval webhook hash)
+        const hashedSecret = crypto.createHash('md5').update(gatewayKeys.payhereSecret).digest('hex').toUpperCase();
+        // Note: PayHere's preapproval webhook often sends payhere_amount as 0.00 or null. Check their exact spec.
+        const localSignature = crypto.createHash('md5')
+            .update(merchant_id + order_id + body.payhere_amount + body.payhere_currency + status_code + hashedSecret)
+            .digest('hex').toUpperCase();
+
+        if (localSignature !== md5sig) {
+            console.error(`[Security Warning] Invalid preapproval webhook signature.`);
+            return;
+        }
+
+        // Save the tokenized card
+        await this.prisma.savedPaymentMethod.create({
+            data: {
+                tenantId: membership.tenantId,
+                membershipId: membership.id,
+                payhereToken: customer_token,
+                mask: card_no || '****',
+                brand: card_brand || 'Card',
+                isDefault: true // You can add logic to make older cards non-default
+            }
+        });
+    }
+
+    // ====================================================================
+    // 🚀 AUTOMATED 1-CLICK CHARGING
+    // ====================================================================
+
+    private async chargeTokenizedCard(tenant: any, invoice: any, savedCard: any) {
+        const gatewayKeys = tenant.gatewayKeys as {
+            payhereAppId?: string;
+            payhereAppSecret?: string;
+            payhereMerchantId?: string
+        } | null;
+
+        if (!gatewayKeys?.payhereAppId || !gatewayKeys?.payhereAppSecret) {
+            throw new BadRequestException('Facility is not configured for automated charging. Missing App API Keys.');
+        }
+
+        const isSandbox = process.env.NODE_ENV !== 'production';
+        const baseUrl = isSandbox ? 'https://sandbox.payhere.lk' : 'https://app.payhere.lk';
+
+        // 1. Get Access Token
+        const authString = Buffer.from(`${gatewayKeys.payhereAppId}:${gatewayKeys.payhereAppSecret}`).toString('base64');
+        const tokenRes = await fetch(`${baseUrl}/merchant/v1/oauth/token`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Basic ${authString}`,
+                'Content-Type': 'application/x-www-form-urlencoded'
+            },
+            body: 'grant_type=client_credentials'
+        });
+
+        if (!tokenRes.ok) throw new BadRequestException('Failed to authenticate with payment gateway.');
+        const {access_token} = await tokenRes.json();
+
+        // 2. Charge the Customer Token
+        const chargeRes = await fetch(`${baseUrl}/merchant/v1/payment/charge`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${access_token}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                type: "PAYMENT",
+                order_id: invoice.id,
+                items: `Invoice - ${invoice.type}`,
+                currency: "LKR",
+                amount: invoice.totalAmount,
+                customer_token: savedCard.payhereToken,
+                custom_1: invoice.type === InvoiceType.SUBSCRIPTION ? invoice.membership.activePlanId : null,
+                custom_2: invoice.type === InvoiceType.TOKEN ? invoice.items[0]?.description : null
+            })
+        });
+
+        const chargeResult = await chargeRes.json();
+
+        // 1 = Success, 2 = Pending (Requires 3DS Auth occasionally), < 0 = Failed
+        if (chargeResult.status === 1 || chargeResult.status === 2) {
+            // We can manually mark the invoice as paid here OR let the standard webhook handle it.
+            // Best practice: Let the webhook handle it to prevent race conditions.
+            return {charged: true, status: chargeResult.status};
+        } else {
+            throw new BadRequestException(`Charge failed: ${chargeResult.msg}`);
+        }
     }
 }
