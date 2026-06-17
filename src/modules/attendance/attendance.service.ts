@@ -10,33 +10,39 @@ export class AttendanceService {
 
     // Notice: tenantId is gone from the signature. The proxy handles it.
     async checkIn(dto: CreateAttendanceDto) {
-        let membershipId = dto.membershipId;
+        let membership;
 
-        // 1. Resolve Membership from RFID if ID isn't provided (Hardware flow)
-        if (!membershipId && dto.rfidTag) {
-            const membership = await this.tenantPrisma.client.membership.findFirst({
-                where: {
-                    rfidTag: dto.rfidTag // tenantId is injected automatically here!
-                },
+        // 1. Resolve Membership (Either by RFID or direct ID)
+        if (dto.rfidTag) {
+            membership = await this.tenantPrisma.client.membership.findFirst({
+                where: {rfidTag: dto.rfidTag},
                 select: { id: true, status: true }
             });
-
-            if (!membership) {
-                throw new NotFoundException('RFID tag not recognized at this facility.');
-            }
-
-            // 2. Revenue Protection Layer
-            if (membership.status === MembershipStatus.SUSPENDED) {
-                throw new ForbiddenException('Access Denied: Membership suspended.');
-            }
-
-            membershipId = membership.id;
+        } else if (dto.membershipId) {
+            membership = await this.tenantPrisma.client.membership.findFirst({
+                where: {id: dto.membershipId},
+                select: {id: true, status: true}
+            });
         }
 
-        // 3. Log the entry in the immutable Attendance table
+        // 2. Existence Validation
+        if (!membership) {
+            throw new NotFoundException(
+                dto.rfidTag
+                    ? 'RFID tag not recognized at this facility.'
+                    : 'Membership ID not recognized.'
+            );
+        }
+
+        // 3. Revenue Protection Layer
+        if (membership.status === MembershipStatus.SUSPENDED) {
+            throw new ForbiddenException('Access Denied: Membership suspended.');
+        }
+
+        // 4. Log the entry in the immutable Attendance table
         return this.tenantPrisma.client.attendance.create({
             data: {
-                membershipId, // tenantId is injected automatically here!
+                membershipId: membership.id,
                 authMethod: dto.authMethod,
                 rfidTag: dto.rfidTag,
                 checkInTime: dto.checkInTime ? new Date(dto.checkInTime) : new Date(),
