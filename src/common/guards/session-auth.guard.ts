@@ -25,8 +25,6 @@ export class SessionAuthGuard implements CanActivate {
             console.error('[SessionAuthGuard] Failed to decode token string');
         }
 
-        console.log('[SessionAuthGuard] Processing Token Lookup:', token);
-
         // 3. Match against your pristine authSession database table records
         const session = await this.prisma.authSession.findUnique({
             where: {id: token},
@@ -44,7 +42,6 @@ export class SessionAuthGuard implements CanActivate {
         }
 
         // 4. Run your exact same cross-schema data sync logic directly here!
-        console.log('[SessionAuthGuard] Session valid. Syncing user profile:', session.userId);
         const strideUser = await this.prisma.user.upsert({
             where: {id: session.userId},
             update: {},
@@ -54,10 +51,29 @@ export class SessionAuthGuard implements CanActivate {
                 firstName: session.user.name?.split(' ')[0] || 'User',
                 lastName: session.user.name?.split(' ')[1] || '',
             },
+            // 🚀 Traverse the nested relation: User -> Memberships -> Roles
+            include: {
+                memberships: {
+                    include: {
+                        roles: true
+                    }
+                }
+            }
         });
 
-        // 5. Populate request.user natively
-        request.user = strideUser;
+        // 5. Safely map the deeply nested roles into the dictionary your controller expects
+        // Converts to: { "tenant-uuid": ["ORG_ADMIN", "TRAINER"], "another-tenant": ["MEMBER"] }
+        const formattedTenantRoles = strideUser.memberships?.reduce((acc: any, membership: any) => {
+            // Extract just the enum strings from the MembershipRole array
+            acc[membership.tenantId] = membership.roles.map((r: any) => r.role);
+            return acc;
+        }, {}) || {};
+
+        request.user = {
+            ...strideUser,
+            tenantRoles: formattedTenantRoles
+        };
+
         return true;
     }
 }

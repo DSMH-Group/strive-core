@@ -44,22 +44,28 @@ export class BillingController {
         @Headers('X-Tenant-ID') tenantId: string,
         @CurrentUser() user: any,
         @Query('membershipId') requestedMembershipId?: string,
-        @Query('userId') requestedUserId?: string // 🚀 NEW: Accept userId from the query string
+        @Query('userId') requestedUserId?: string
     ) {
-        const isAdmin = user.globalRole === 'SYSTEM_ADMIN' || !!user.tenantRoles?.[tenantId];
+        // 1. Extract the array of roles the user holds in this specific gym/tenant
+        const tenantRoles: string[] = user?.tenantRoles?.[tenantId] || [];
 
-        console.log("Hi, this is...", isAdmin, user.globalRole, user.tenantRoles, tenantId, requestedMembershipId, requestedUserId,)
+        // 2. Check if the user holds any of the authorized staff roles
+        const isStaff = tenantRoles.some(role =>
+            ['ORG_ADMIN', 'MANAGER', 'TRAINER'].includes(role)
+        );
 
-        if (isAdmin) {
-            // 🚀 Admins can filter by either membershipId OR userId
+        console.log("New Test:", isStaff, tenantRoles, tenantId, user)
+
+        if (isStaff) {
+            // Staff can view anyone's invoices by passing userId or membershipId
             return this.billingService.getInvoices(tenantId, {
                 membershipId: requestedMembershipId,
                 userId: requestedUserId
             });
-        } else {
-            // Standard members can ONLY see their own invoices
-            return this.billingService.getInvoices(tenantId, {userId: user.id});
         }
+
+        // Standard MEMBERs are strictly locked to viewing their own ledger
+        return this.billingService.getInvoices(tenantId, {userId: user.id});
     }
 
     @Post('payments/manual')
