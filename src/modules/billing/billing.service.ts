@@ -140,17 +140,17 @@ export class BillingService {
         });
 
         // Check if the user wants to use a saved card (1-Click Payment)
-        // if (dto.cardId) {
-        //     const savedCard = await this.prisma.savedPaymentMethod.findUnique({
-        //         where: {id: dto.cardId, membershipId: membership.id}
-        //     });
-        //
-        //     if (savedCard) {
-        //         // Background charge the card. If it throws, the controller returns a 400.
-        //         await this.chargeTokenizedCard(tenant, invoice, savedCard);
-        //         return {charged: true}; // Tells frontend to NOT open the PayHere modal
-        //     }
-        // }
+        if (dto.cardId) {
+            const savedCard = await this.prisma.savedPaymentMethod.findUnique({
+                where: {id: dto.cardId, membershipId: membership.id}
+            });
+
+            if (savedCard) {
+                // Background charge the card. If it throws, the controller returns a 400.
+                await this.chargeTokenizedCard(tenant, invoice, savedCard);
+                return {charged: true}; // Tells frontend to NOT open the PayHere modal
+            }
+        }
 
         // Fallback: If no cardId provided, return standard payload for the UI modal
         return this.buildCheckoutPayload(invoice, tenant, plan.id);

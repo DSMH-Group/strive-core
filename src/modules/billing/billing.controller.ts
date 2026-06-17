@@ -43,13 +43,17 @@ export class BillingController {
     async getInvoices(
         @Headers('X-Tenant-ID') tenantId: string,
         @CurrentUser() user: any,
-        @Query('membershipId') requestedMembershipId?: string
+        @Query('membershipId') requestedMembershipId?: string,
+        @Query('userId') requestedUserId?: string // 🚀 NEW: Accept userId from the query string
     ) {
         const isAdmin = user.globalRole === 'SYSTEM_ADMIN' || !!user.tenantRoles?.[tenantId];
 
         if (isAdmin) {
-            // Admins can see all tenant invoices, or filter by a specific member's invoice ledger
-            return this.billingService.getInvoices(tenantId, {membershipId: requestedMembershipId});
+            // 🚀 Admins can filter by either membershipId OR userId
+            return this.billingService.getInvoices(tenantId, {
+                membershipId: requestedMembershipId,
+                userId: requestedUserId
+            });
         } else {
             // Standard members can ONLY see their own invoices
             return this.billingService.getInvoices(tenantId, {userId: user.id});
