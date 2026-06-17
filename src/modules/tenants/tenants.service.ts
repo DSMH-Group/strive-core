@@ -139,12 +139,14 @@ export class TenantsService {
                         name: dto.name,
                         domain: dto.subdomain,
                         slug: generatedSlug,
+                        // 🚀 FIXED: Added the default sidebarTheme to the initial provisioning payload
                         themeConfig: {
                             primaryColor: '#ea580c', // Strive Orange
                             logoUrl: null,
                             themeMode: 'dark',
                             radius: 0.5,
-                            fontFamily: 'sans'
+                            fontFamily: 'sans',
+                            sidebarTheme: 'default' // <-- Added this line
                         } as Prisma.InputJsonObject,
                         // Initialize default business rules upon creation
                         businessRules: {

@@ -6,7 +6,7 @@ import {Type} from 'class-transformer';
 class ThemeConfigDto {
     @ApiPropertyOptional({example: '#ea580c'})
     @IsOptional()
-    @IsHexColor() // Note: You might want @IsString() here instead if users can pass HSL strings later, but for Hex this is perfect.
+    @IsHexColor()
     primaryColor?: string;
 
     @ApiPropertyOptional({example: 'https://s3.amazonaws.com/logo.png'})
@@ -14,11 +14,11 @@ class ThemeConfigDto {
     @IsUrl()
     logoUrl?: string;
 
-    // 🚀 NEW: Added the missing theme properties
+    // 🚀 FIXED: Expanded the validation array to accept the new theme options
     @ApiPropertyOptional({example: 'dark', description: 'Base application theme'})
     @IsOptional()
-    @IsIn(['light', 'dark'], {message: 'themeMode must be either light or dark'})
-    themeMode?: 'light' | 'dark';
+    @IsIn(['light', 'white', 'warm', 'cool', 'dark', 'midnight', 'navy', 'slate'], {message: 'Invalid themeMode selected'})
+    themeMode?: 'light' | 'white' | 'warm' | 'cool' | 'dark' | 'midnight' | 'navy' | 'slate';
 
     @ApiPropertyOptional({example: 0.5, description: 'Base border radius for UI components (rem)'})
     @IsOptional()
@@ -29,6 +29,12 @@ class ThemeConfigDto {
     @IsOptional()
     @IsString()
     fontFamily?: string;
+
+    // 🚀 NEW: Added the sidebarTheme property to the payload validation
+    @ApiPropertyOptional({example: 'default', description: 'Sidebar coloring strategy'})
+    @IsOptional()
+    @IsIn(['default', 'dark', 'brand'], {message: 'sidebarTheme must be default, dark, or brand'})
+    sidebarTheme?: 'default' | 'dark' | 'brand';
 }
 
 class TaxRulesDto {
