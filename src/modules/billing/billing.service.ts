@@ -292,7 +292,6 @@ export class BillingService {
     // ====================================================================
     // 🚀 ASYNCHRONOUS WEBHOOK RECONCILIATION
     // ====================================================================
-
     async generateCardSetupPayload(tenantId: string, userId: string) {
         const tenant = await this.prisma.tenant.findUnique({where: {id: tenantId}});
         const membership = await this.prisma.membership.findUnique({
@@ -310,14 +309,15 @@ export class BillingService {
         const currency = (tenant.businessRules as any)?.defaultCurrency || 'LKR';
         const setupOrderId = `SETUP_${crypto.randomUUID().replace(/-/g, '').substring(0, 10)}`;
 
-        // 🚀 THE FIX: PayHere strictly requires an amount to be present, even for card setup
+        // PayHere requires a dummy amount in the JSON to open the UI
         const amountStr = "0.00";
 
         const hashedSecret = crypto.createHash('md5').update(gatewayKeys.payhereSecret).digest('hex').toUpperCase();
 
-        // 🚀 THE FIX: The amount MUST be included in the hash calculation
+        // 🚀 THE FIX: Preapproval hash does NOT include the amount!
+        // Formula: md5(merchant_id + order_id + currency + md5(payhere_secret))
         const hash = crypto.createHash('md5')
-            .update(gatewayKeys.payhereMerchantId + setupOrderId + amountStr + currency + hashedSecret)
+            .update(gatewayKeys.payhereMerchantId + setupOrderId + currency + hashedSecret)
             .digest('hex').toUpperCase();
 
         return {
@@ -326,7 +326,7 @@ export class BillingService {
             order_id: setupOrderId,
             items: `Secure Card Setup`,
             currency,
-            amount: amountStr, // 🚀 Inject the 0.00 amount into the payload
+            amount: amountStr, // Passed in JSON, but skipped in Hash
             hash,
             first_name: membership.user.firstName,
             last_name: membership.user.lastName,
