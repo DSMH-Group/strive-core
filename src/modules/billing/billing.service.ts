@@ -386,13 +386,16 @@ export class BillingService {
         }
 
         const currency = (tenant.businessRules as any)?.defaultCurrency || 'LKR';
-        // Generate a random ID since there is no invoice for a setup request
         const setupOrderId = `SETUP_${crypto.randomUUID().replace(/-/g, '').substring(0, 10)}`;
 
-        // PREAPPROVAL HASH: md5(merchant_id + order_id + currency + md5(payhere_secret))
+        // 🚀 THE FIX: PayHere strictly requires an amount to be present, even for card setup
+        const amountStr = "0.00";
+
         const hashedSecret = crypto.createHash('md5').update(gatewayKeys.payhereSecret).digest('hex').toUpperCase();
+
+        // 🚀 THE FIX: The amount MUST be included in the hash calculation
         const hash = crypto.createHash('md5')
-            .update(gatewayKeys.payhereMerchantId + setupOrderId + currency + hashedSecret)
+            .update(gatewayKeys.payhereMerchantId + setupOrderId + amountStr + currency + hashedSecret)
             .digest('hex').toUpperCase();
 
         return {
@@ -401,6 +404,7 @@ export class BillingService {
             order_id: setupOrderId,
             items: `Secure Card Setup`,
             currency,
+            amount: amountStr, // 🚀 Inject the 0.00 amount into the payload
             hash,
             first_name: membership.user.firstName,
             last_name: membership.user.lastName,
@@ -409,7 +413,7 @@ export class BillingService {
             address: 'N/A',
             city: 'N/A',
             country: 'Sri Lanka',
-            custom_1: membership.id // Crucial: Pass membership ID so webhook knows who to assign the card to
+            custom_1: membership.id
         };
     }
 
