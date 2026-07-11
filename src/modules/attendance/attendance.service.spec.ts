@@ -2,6 +2,7 @@
 import {Test, TestingModule} from '@nestjs/testing';
 import {AttendanceService} from './attendance.service';
 import {TenantPrismaService} from '../../database/tenant-prisma.service';
+import {PrismaService} from '../../database/prisma.service';
 import {ForbiddenException} from '@nestjs/common';
 import {MembershipStatus} from '@prisma/client';
 
@@ -19,10 +20,12 @@ describe('AttendanceService', () => {
     let service: AttendanceService;
 
     beforeEach(async () => {
+        jest.clearAllMocks();
         const module: TestingModule = await Test.createTestingModule({
             providers: [
                 AttendanceService,
                 {provide: TenantPrismaService, useValue: mockTenantPrisma},
+                {provide: PrismaService, useValue: mockPrisma},
             ],
         }).compile();
         service = module.get<AttendanceService>(AttendanceService);
@@ -33,5 +36,39 @@ describe('AttendanceService', () => {
 
         await expect(service.checkIn({membershipId: 'm-1', authMethod: 'QR'}))
             .rejects.toThrow(ForbiddenException);
+    });
+
+    it('should sweep and checkout yesterday\'s stale sessions', async () => {
+        const yesterday = new Date();
+        yesterday.setDate(yesterday.getDate() - 1);
+        yesterday.setHours(14, 0, 0, 0);
+
+        mockPrisma.attendance.findMany.mockResolvedValue([
+            {
+                id: 'att-1',
+                checkInTime: yesterday,
+                checkOutTime: null,
+                tenant: {
+                    businessRules: {
+                        operatingHours: [
+                            {day: 'Monday', open: '06:00', close: '20:00', active: true},
+                            {day: 'Tuesday', open: '06:00', close: '20:00', active: true},
+                            {day: 'Wednesday', open: '06:00', close: '20:00', active: true},
+                            {day: 'Thursday', open: '06:00', close: '20:00', active: true},
+                            {day: 'Friday', open: '06:00', close: '20:00', active: true},
+                            {day: 'Saturday', open: '06:00', close: '20:00', active: true},
+                            {day: 'Sunday', open: '06:00', close: '20:00', active: true}
+                        ]
+                    }
+                }
+            }
+        ]);
+
+        await service.autoCheckoutStaleSessions();
+
+        expect(mockPrisma.attendance.update).toHaveBeenCalledWith(expect.objectContaining({
+            where: {id: 'att-1'},
+            data: {checkOutTime: expect.any(Date)}
+        }));
     });
 });
