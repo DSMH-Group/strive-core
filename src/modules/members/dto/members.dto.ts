@@ -119,3 +119,24 @@ export class MembershipResponseDto {
     @ApiProperty({type: [MembershipRoleResponseDto]})
     roles: MembershipRoleResponseDto[];
 }
+
+export class AssignProgramDto {
+    @ApiProperty({ example: 'Push-Pull-Legs Hypertrophy' })
+    @IsString()
+    @IsNotEmpty()
+    name: string;
+
+    @ApiProperty({ example: 'Build Muscle' })
+    @IsString()
+    @IsNotEmpty()
+    goal: string;
+
+    @ApiPropertyOptional({ example: 12 })
+    @IsInt()
+    @IsOptional()
+    totalWeeks?: number;
+
+    @ApiProperty({ example: [] })
+    @IsNotEmpty()
+    routines: any;
+}

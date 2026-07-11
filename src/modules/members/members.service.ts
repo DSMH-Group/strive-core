@@ -3,7 +3,7 @@ import {ConflictException, ForbiddenException, Injectable, Logger, NotFoundExcep
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import {PrismaService} from '../../database/prisma.service';
-import {CreateMembershipDto, TransitionMembershipDto, UpdateMembershipDto} from './dto/members.dto';
+import {AssignProgramDto, CreateMembershipDto, TransitionMembershipDto, UpdateMembershipDto} from './dto/members.dto';
 import {InvitationStatus, InvoiceStatus, InvoiceType, MembershipStatus, Role} from '@prisma/client';
 import {CreateInvitationDto} from "./dto/invitations.dto";
 
@@ -112,7 +112,7 @@ export class MembersService {
         // 1. Fetch the target membership
         const membership = await this.prisma.membership.findUnique({
             where: {id: membershipId},
-            include: {user: true, roles: true, activePlan: true}
+            include: {user: true, roles: true, activePlan: true, activeProgram: true}
         });
 
         if (!membership || membership.tenantId !== tenantId) {
@@ -371,5 +371,49 @@ export class MembersService {
         if (tasks.length > 0) {
             await Promise.allSettled(tasks);
         }
+    }
+
+    async assignProgram(tenantId: string, membershipId: string, dto: AssignProgramDto) {
+        const membership = await this.prisma.membership.findUnique({
+            where: { id: membershipId }
+        });
+        if (!membership || membership.tenantId !== tenantId) {
+            throw new NotFoundException('Membership not found in this environment.');
+        }
+
+        return this.prisma.programAssignment.upsert({
+            where: { membershipId },
+            update: {
+                name: dto.name,
+                goal: dto.goal,
+                totalWeeks: dto.totalWeeks ?? 12,
+                routines: dto.routines,
+            },
+            create: {
+                membershipId,
+                name: dto.name,
+                goal: dto.goal,
+                totalWeeks: dto.totalWeeks ?? 12,
+                routines: dto.routines,
+            }
+        });
+    }
+
+    async deleteProgram(tenantId: string, membershipId: string) {
+        const membership = await this.prisma.membership.findUnique({
+            where: { id: membershipId }
+        });
+        if (!membership || membership.tenantId !== tenantId) {
+            throw new NotFoundException('Membership not found in this environment.');
+        }
+
+        try {
+            await this.prisma.programAssignment.delete({
+                where: { membershipId }
+            });
+        } catch {
+            // ignore if not found
+        }
+        return { success: true };
     }
 }

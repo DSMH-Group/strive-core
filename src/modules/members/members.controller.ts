@@ -2,7 +2,7 @@
 import {Body, Controller, Delete, Get, Headers, HttpStatus, Param, Patch, Post, Query, UseGuards} from '@nestjs/common';
 import {ApiBearerAuth, ApiOperation, ApiParam, ApiQuery, ApiResponse, ApiTags} from '@nestjs/swagger';
 import {MembersService} from './members.service';
-import {CreateMembershipDto, TransitionMembershipDto, UpdateMembershipDto} from './dto/members.dto';
+import {AssignProgramDto, CreateMembershipDto, TransitionMembershipDto, UpdateMembershipDto} from './dto/members.dto';
 import {CreateInvitationDto} from './dto/invitations.dto';
 import {SessionAuthGuard} from '../../common/guards/session-auth.guard';
 import {RolesGuard} from '../../common/guards/roles.guard';
@@ -163,5 +163,30 @@ export class MembersController {
     ) {
         // currentUser.id is the global User ID provided by your SessionAuthGuard
         return this.membersService.acceptInvitation(currentUser.id, inviteId);
+    }
+
+    @Post(':id/program')
+    @Roles('ORG_ADMIN', 'MANAGER', 'TRAINER')
+    @ApiOperation({summary: 'Assign a workout program to a member'})
+    @ApiParam({name: 'id', type: 'string', description: 'UUID of the membership'})
+    @ApiResponse({status: HttpStatus.CREATED, description: 'Workout program assigned successfully.'})
+    async assignProgram(
+        @Headers('X-Tenant-ID') tenantId: string,
+        @Param('id') id: string,
+        @Body() dto: AssignProgramDto
+    ) {
+        return this.membersService.assignProgram(tenantId, id, dto);
+    }
+
+    @Delete(':id/program')
+    @Roles('ORG_ADMIN', 'MANAGER', 'TRAINER')
+    @ApiOperation({summary: 'Unassign the workout program from a member'})
+    @ApiParam({name: 'id', type: 'string', description: 'UUID of the membership'})
+    @ApiResponse({status: HttpStatus.OK, description: 'Workout program unassigned.'})
+    async deleteProgram(
+        @Headers('X-Tenant-ID') tenantId: string,
+        @Param('id') id: string
+    ) {
+        return this.membersService.deleteProgram(tenantId, id);
     }
 }

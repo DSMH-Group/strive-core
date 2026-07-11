@@ -93,6 +93,7 @@ model Membership {
   invoices    Invoice[]
   roles       MembershipRole[]
   metrics     Metric[]
+  activeProgram ProgramAssignment?
 
   tenant              Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   user                User                @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -102,6 +103,23 @@ model Membership {
 
   @@unique([userId, tenantId])
   @@map("memberships")
+  @@schema("stride")
+}
+
+model ProgramAssignment {
+  id            String     @id @default(uuid())
+  membershipId  String     @unique
+  name          String
+  goal          String
+  currentWeek   Int        @default(1)
+  totalWeeks    Int        @default(12)
+  routines      Json       // Array of daily routine templates
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+
+  membership    Membership @relation(fields: [membershipId], references: [id], onDelete: Cascade)
+
+  @@map("program_assignments")
   @@schema("stride")
 }
 
