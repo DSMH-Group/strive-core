@@ -187,6 +187,7 @@ export class TenantsService {
                 name: true,
                 domain: true,
                 themeConfig: true,
+                businessRules: true,
             }
         });
 
@@ -197,6 +198,7 @@ export class TenantsService {
             name: tenant.name,
             subdomain: tenant.domain,
             themeConfig: tenant.themeConfig,
+            businessRules: tenant.businessRules,
         };
     }
 

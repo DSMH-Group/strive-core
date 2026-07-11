@@ -84,6 +84,10 @@ class BusinessRulesDto {
     @IsOptional()
     @IsBoolean()
     allowSelfService?: boolean;
+
+    @ApiPropertyOptional({description: 'Ecosystem-wide facility operating hours settings'})
+    @IsOptional()
+    operatingHours?: any;
 }
 
 export class UpdateTenantDto {
