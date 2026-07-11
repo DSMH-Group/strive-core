@@ -18,7 +18,7 @@ export class MetricsController {
     }
 
     @Post()
-    @Roles('TRAINER', 'MEMBER')
+    @Roles('ORG_ADMIN', 'MANAGER', 'TRAINER', 'MEMBER')
     @ApiOperation({
         summary: 'Log a performance metric',
         description: 'Allows members to log personal stats (weight, PRs) or trainers to log client stats.'
@@ -34,7 +34,7 @@ export class MetricsController {
     }
 
     @Get('session-types')
-    @Roles('TRAINER', 'MEMBER')
+    @Roles('ORG_ADMIN', 'MANAGER', 'TRAINER', 'MEMBER')
     @ApiOperation({
         summary: 'Get distinct logged session types',
         description: 'Fetch all unique session types recorded in metrics for this tenant.'
@@ -46,7 +46,7 @@ export class MetricsController {
     }
 
     @Get()
-    @Roles('TRAINER', 'MEMBER')
+    @Roles('ORG_ADMIN', 'MANAGER', 'TRAINER', 'MEMBER')
     @ApiOperation({
         summary: 'Retrieve metric history',
         description: 'Fetch time-series data for specific metric types like WEIGHT or ARCHERY_SCORE.'
