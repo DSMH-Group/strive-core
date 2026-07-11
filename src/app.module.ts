@@ -22,6 +22,7 @@ import {PlansModule} from "./modules/plans/plans.module";
 import {BullModule} from '@nestjs/bullmq';
 import {DevicesModule} from './modules/devices/devices.module';
 import {SessionTemplatesModule} from './modules/session-templates/session-templates.module';
+import {ExercisesModule} from './modules/exercises/exercises.module';
 
 @Module({
     imports: [
@@ -61,7 +62,8 @@ import {SessionTemplatesModule} from './modules/session-templates/session-templa
         SystemModule,
         PlansModule,
         DevicesModule,
-        SessionTemplatesModule
+        SessionTemplatesModule,
+        ExercisesModule
     ],
 })
 export class AppModule implements NestModule {
