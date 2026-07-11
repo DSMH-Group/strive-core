@@ -46,6 +46,7 @@ model Tenant {
   savedPaymentMethods SavedPaymentMethod[]
   devices             Device[]
   sessionTemplates    SessionTemplate[]
+  programTemplates    ProgramTemplate[]
 
   @@map("tenants")
   @@schema("stride")
@@ -508,5 +509,21 @@ model Exercise {
   updatedAt    DateTime @updatedAt
 
   @@map("exercises")
+  @@schema("stride")
+}
+
+model ProgramTemplate {
+  id          String   @id @default(uuid())
+  tenantId    String
+  name        String
+  goal        String
+  totalWeeks  Int      @default(12)
+  routines    Json     // Array of routines with exercises
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@map("program_templates")
   @@schema("stride")
 }
