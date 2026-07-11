@@ -21,16 +21,27 @@ export class MetricsService {
         });
     }
 
-    async getMetrics(tenantId: string, userId: string, metricType?: string) {
-        const membership = await this.prisma.membership.findUnique({
+    async getMetrics(tenantId: string, userId: string, metricType?: string, targetMembershipId?: string) {
+        const callerMembership = await this.prisma.membership.findUnique({
             where: { userId_tenantId: { userId, tenantId } },
+            include: { roles: true }
         });
 
-        if (!membership) throw new NotFoundException('Membership not found');
+        if (!callerMembership) throw new NotFoundException('Caller membership not found');
+
+        let queryMembershipId = callerMembership.id;
+
+        if (targetMembershipId) {
+            const isStaff = callerMembership.roles.some(r => ['ORG_ADMIN', 'MANAGER', 'TRAINER'].includes(r.role));
+            if (!isStaff && targetMembershipId !== callerMembership.id) {
+                throw new ForbiddenException('You do not have permission to view this member\'s metrics');
+            }
+            queryMembershipId = targetMembershipId;
+        }
 
         return this.prisma.metric.findMany({
             where: {
-                membershipId: membership.id,
+                membershipId: queryMembershipId,
                 ...(metricType && { metricType: metricType.toUpperCase() }),
             },
             orderBy: { recordedAt: 'desc' },

@@ -62,8 +62,9 @@ export class MetricsController {
         @Headers('X-Tenant-ID') tenantId: string,
         @CurrentUser('id') userId: string,
         @Query('metricType') metricType?: string,
+        @Query('membershipId') targetMembershipId?: string,
     ) {
-        return this.metricsService.getMetrics(tenantId, userId, metricType);
+        return this.metricsService.getMetrics(tenantId, userId, metricType, targetMembershipId);
     }
 
     @Post('health/sync')
