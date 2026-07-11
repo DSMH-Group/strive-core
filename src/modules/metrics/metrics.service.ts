@@ -73,4 +73,35 @@ export class MetricsService {
 
         return ownMembership.id;
     }
+
+    async getSessionTypes(tenantId: string): Promise<string[]> {
+        const metrics = await this.prisma.metric.findMany({
+            where: {
+                metricType: "WORKOUT_LOG",
+                membership: { tenantId }
+            },
+            select: {
+                data: true
+            }
+        });
+
+        const types = new Set<string>();
+        types.add("Fat Loss");
+        types.add("Hypertrophy");
+        types.add("Strength");
+        types.add("Conditioning");
+
+        for (const m of metrics) {
+            try {
+                const dataObj = m.data as any;
+                if (dataObj && typeof dataObj.sessionType === 'string' && dataObj.sessionType.trim()) {
+                    types.add(dataObj.sessionType.trim());
+                }
+            } catch (err) {
+                // ignore
+            }
+        }
+
+        return Array.from(types);
+    }
 }

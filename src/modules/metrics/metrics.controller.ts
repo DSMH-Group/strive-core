@@ -33,6 +33,18 @@ export class MetricsController {
         return this.metricsService.logMetric(tenantId, userId, dto);
     }
 
+    @Get('session-types')
+    @Roles('TRAINER', 'MEMBER')
+    @ApiOperation({
+        summary: 'Get distinct logged session types',
+        description: 'Fetch all unique session types recorded in metrics for this tenant.'
+    })
+    async getSessionTypes(
+        @Headers('X-Tenant-ID') tenantId: string,
+    ) {
+        return this.metricsService.getSessionTypes(tenantId);
+    }
+
     @Get()
     @Roles('TRAINER', 'MEMBER')
     @ApiOperation({
