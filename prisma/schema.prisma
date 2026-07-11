@@ -45,6 +45,7 @@ model Tenant {
   plans               Plan[] // 🚀 NEW: Relation to the tenant's product catalog
   savedPaymentMethods SavedPaymentMethod[]
   devices             Device[]
+  sessionTemplates    SessionTemplate[]
 
   @@map("tenants")
   @@schema("stride")
@@ -461,5 +462,19 @@ enum CredentialType {
   NFC_SMART_TAP
   FINGERPRINT
 
+  @@schema("stride")
+}
+
+model SessionTemplate {
+  id        String   @id @default(uuid())
+  tenantId  String
+  name      String
+  exercises Json     // [{ name: "Bench Press", sets: 4 }, ...]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@map("session_templates")
   @@schema("stride")
 }
