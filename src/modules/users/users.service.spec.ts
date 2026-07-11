@@ -2,7 +2,7 @@
 import {Test, TestingModule} from '@nestjs/testing';
 import {UsersService} from './users.service';
 import {PrismaService} from '../../database/prisma.service';
-import {BadRequestException, InternalServerErrorException, NotFoundException} from '@nestjs/common';
+import {InternalServerErrorException, NotFoundException} from '@nestjs/common';
 import {InvitationStatus, MembershipStatus, Role} from '@prisma/client';
 
 describe('UsersService', () => {
@@ -13,6 +13,7 @@ describe('UsersService', () => {
     const mockPrismaService = {
         user: {
             findFirst: jest.fn(),
+            findUnique: jest.fn(),
             upsert: jest.fn(),
             update: jest.fn(),
         },
@@ -62,41 +63,24 @@ describe('UsersService', () => {
             memberships: [],
         };
 
-        it('should successfully resolve user from request object context', async () => {
-            mockPrismaService.user.findFirst.mockResolvedValue(mockUserRecord);
+        it('should successfully resolve user when internalUserId is passed', async () => {
+            mockPrismaService.user.findUnique.mockResolvedValue(mockUserRecord);
 
-            const result = await service.getMe({keycloakId: 'keycloak-sub-claim-1234'});
+            const result = await service.getMe('strive-user-uuid');
 
-            expect(mockPrismaService.user.findFirst).toHaveBeenCalledWith(
+            expect(mockPrismaService.user.findUnique).toHaveBeenCalledWith(
                 expect.objectContaining({
-                    where: {
-                        OR: [
-                            {keycloakId: 'keycloak-sub-claim-1234'},
-                            {id: 'keycloak-sub-claim-1234'}
-                        ]
-                    }
+                    where: {id: 'strive-user-uuid'}
                 })
             );
             expect(result).toEqual(mockUserRecord);
         });
 
-        it('should successfully resolve user when string raw parameter is passed directly', async () => {
-            mockPrismaService.user.findFirst.mockResolvedValue(mockUserRecord);
+        it('should return null if user is missing', async () => {
+            mockPrismaService.user.findUnique.mockResolvedValue(null);
 
-            const result = await service.getMe('keycloak-sub-claim-1234');
-
-            expect(result.id).toBe('strive-user-uuid');
-        });
-
-        it('should throw BadRequestException if identity footprint evaluates to empty/undefined', async () => {
-            await expect(service.getMe(null)).rejects.toThrow(BadRequestException);
-            await expect(service.getMe({})).rejects.toThrow(BadRequestException);
-        });
-
-        it('should throw NotFoundException if user is missing inside database registry matching parameters', async () => {
-            mockPrismaService.user.findFirst.mockResolvedValue(null);
-
-            await expect(service.getMe('non-existent-id')).rejects.toThrow(NotFoundException);
+            const result = await service.getMe('non-existent-id');
+            expect(result).toBeNull();
         });
     });
 

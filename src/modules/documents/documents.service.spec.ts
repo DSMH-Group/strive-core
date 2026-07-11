@@ -1,8 +1,8 @@
 // src/modules/documents/documents.service.spec.ts
-import { Test, TestingModule } from '@nestjs/testing';
-import { DocumentsService } from './documents.service';
-import { PrismaService } from '../../database/prisma.service';
-import { ConfigService } from '@nestjs/config';
+import {Test, TestingModule} from '@nestjs/testing';
+import {DocumentsService} from './documents.service';
+import {TenantPrismaService} from '../../database/tenant-prisma.service';
+import {ConfigService} from '@nestjs/config';
 
 describe('DocumentsService', () => {
     let service: DocumentsService;
@@ -17,13 +17,22 @@ describe('DocumentsService', () => {
             if (key === 'AWS_REGION') return 'ap-south-1';
             return 'mock-value';
         }),
+        getOrThrow: jest.fn((key: string) => {
+            if (key === 'AWS_REGION') return 'ap-south-1';
+            return 'mock-value';
+        }),
+    };
+
+    const mockTenantPrisma = {
+        client: mockPrisma,
+        activeTenantId: 'test-tenant-id',
     };
 
     beforeEach(async () => {
         const module: TestingModule = await Test.createTestingModule({
             providers: [
                 DocumentsService,
-                { provide: PrismaService, useValue: mockPrisma },
+                {provide: TenantPrismaService, useValue: mockTenantPrisma},
                 { provide: ConfigService, useValue: mockConfig },
             ],
         }).compile();

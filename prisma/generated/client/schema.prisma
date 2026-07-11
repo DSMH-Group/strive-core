@@ -1,0 +1,316 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+  // Enforce explicit output generation
+  output   = "./generated/client"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ------------------------------------------------------
+// 1. GLOBAL IDENTITY (Platform Level)
+// ------------------------------------------------------
+
+model User {
+  id         String  @id @default(uuid())
+  keycloakId String? @unique // Maps to the JWT 'sub' claim from Keycloak
+  email      String  @unique
+  phone      String? @unique // Crucial for SL market (SMS OTP via Text.lk)
+  firstName  String
+  lastName   String
+
+  isGlobalAdmin Boolean @default(false)
+  isActive      Boolean @default(true)
+
+  memberships Membership[]
+  auditLogs   AuditLog[] // Tracks actions performed by this user globally
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("users")
+}
+
+// ------------------------------------------------------
+// 2. TENANCY (B2B Configuration)
+// ------------------------------------------------------
+
+model Tenant {
+  id     String  @id @default(uuid())
+  name   String
+  slug   String  @unique
+  domain String? @unique
+
+  // B2B Configs (JSONB allows flexible structures)
+  themeConfig Json? // CSS variables, logo URLs
+  taxRules    Json? // VAT, SSCL percentages
+  gatewayKeys Json? // Encrypted PayHere/DirectPay Merchant IDs
+
+  // Domain Relations (The Horizontal Isolation boundary)
+  memberships Membership[]
+  attendances Attendance[]
+  invoices    Invoice[]
+  resources   Resource[]
+  auditLogs   AuditLog[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("tenants")
+}
+
+// ------------------------------------------------------
+// 3. MEMBERSHIP & RBAC (The Intersection)
+// ------------------------------------------------------
+
+model Membership {
+  id       String           @id @default(uuid())
+  userId   String
+  tenantId String
+  status   MembershipStatus @default(ACTIVE)
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  roles MembershipRole[]
+
+  // Domain Relations (The Vertical Isolation boundary)
+  attendances Attendance[]
+  invoices    Invoice[]
+  bookings    Booking[]
+  metrics     Metric[]
+  documents   Document[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, tenantId])
+  @@map("memberships")
+}
+
+model MembershipRole {
+  id           String @id @default(uuid())
+  membershipId String
+  role         Role
+
+  membership Membership @relation(fields: [membershipId], references: [id], onDelete: Cascade)
+
+  @@unique([membershipId, role])
+  @@map("membership_roles")
+}
+
+// ------------------------------------------------------
+// 4. ATTENDANCE & INGRESS
+// ------------------------------------------------------
+
+model Attendance {
+  id           String  @id @default(uuid())
+  tenantId     String
+  membershipId String? // Nullable in case of raw RFID scans before user linking
+  rfidTag      String?
+  authMethod   String // e.g., 'RFID', 'QR', 'MANUAL'
+
+  checkInTime  DateTime  @default(now())
+  checkOutTime DateTime? // For duration calculations
+
+  tenant     Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  membership Membership? @relation(fields: [membershipId], references: [id], onDelete: Cascade)
+
+  @@map("attendances")
+}
+
+// ------------------------------------------------------
+// 5. BILLING & LEDGER
+// ------------------------------------------------------
+
+model Invoice {
+  id           String @id @default(uuid())
+  tenantId     String
+  membershipId String
+
+  type   InvoiceType // SUBSCRIPTION or TOKEN
+  status InvoiceStatus @default(DRAFT)
+
+  totalAmount Decimal   @db.Decimal(10, 2) // Always use Decimal for LKR
+  dueDate     DateTime?
+
+  tenant     Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  membership Membership @relation(fields: [membershipId], references: [id], onDelete: Cascade)
+
+  payments Payment[]
+  items    InvoiceItem[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("invoices")
+}
+
+model InvoiceItem {
+  id          String  @id @default(uuid())
+  invoiceId   String
+  description String
+  amount      Decimal @db.Decimal(10, 2)
+
+  invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@map("invoice_items")
+}
+
+model Payment {
+  id          String        @id @default(uuid())
+  invoiceId   String
+  amount      Decimal       @db.Decimal(10, 2)
+  method      PaymentMethod // CASH, BANK_TRANSFER, PAYHERE
+  gatewayTxId String?       @unique // ID from PayHere/DirectPay
+  status      PaymentStatus @default(PENDING)
+
+  invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  processedAt DateTime @default(now())
+
+  @@map("payments")
+}
+
+// ------------------------------------------------------
+// 6. RESOURCES & SCHEDULING
+// ------------------------------------------------------
+
+model Resource {
+  id             String       @id @default(uuid())
+  tenantId       String
+  name           String
+  type           ResourceType // PHYSICAL or HUMAN
+  capacity       Int          @default(1)
+  linkedMemberId String? // For Trainer scheduling
+
+  tenant   Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  bookings Booking[]
+
+  @@map("resources")
+}
+
+model Booking {
+  id           String @id @default(uuid())
+  resourceId   String
+  membershipId String
+
+  startTime DateTime
+  endTime   DateTime
+
+  resource   Resource   @relation(fields: [resourceId], references: [id], onDelete: Cascade)
+  membership Membership @relation(fields: [membershipId], references: [id], onDelete: Cascade)
+
+  @@map("bookings")
+}
+
+// ------------------------------------------------------
+// 7. EXTENSIBLE METRICS & HEALTH
+// ------------------------------------------------------
+
+model Metric {
+  id           String @id @default(uuid())
+  membershipId String
+
+  metricType String // e.g., 'WEIGHT', 'ARCHERY_SCORE', 'STEPS'
+  data       Json // The flexible payload
+
+  recordedAt DateTime @default(now())
+
+  membership Membership @relation(fields: [membershipId], references: [id], onDelete: Cascade)
+
+  @@map("metrics")
+}
+
+// ------------------------------------------------------
+// 8. STORAGE & DOCUMENTS
+// ------------------------------------------------------
+
+model Document {
+  id           String @id @default(uuid())
+  membershipId String
+
+  fileName String
+  fileUrl  String // S3 bucket path
+  context  String // e.g., 'WAIVER', 'AVATAR', 'MEDICAL'
+
+  uploadedAt DateTime @default(now())
+
+  membership Membership @relation(fields: [membershipId], references: [id], onDelete: Cascade)
+
+  @@map("documents")
+}
+
+// ------------------------------------------------------
+// 9. AUDITING (Immutable Logs)
+// ------------------------------------------------------
+
+model AuditLog {
+  id       String  @id @default(uuid())
+  tenantId String
+  userId   String? // The Global User who performed the action
+
+  action   String // e.g., 'MEMBER_STATUS_CHANGED', 'INVOICE_PAID'
+  entity   String // The table affected
+  entityId String // The ID of the affected record
+  changes  Json? // Diff of what changed
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user   User?  @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+
+  @@map("audit_logs")
+}
+
+// ------------------------------------------------------
+// ENUMS
+// ------------------------------------------------------
+
+enum Role {
+  ORG_ADMIN
+  MANAGER
+  TRAINER
+  MEMBER
+}
+
+enum MembershipStatus {
+  PENDING
+  ACTIVE
+  GRACE_PERIOD
+  SUSPENDED
+}
+
+enum InvoiceType {
+  SUBSCRIPTION
+  TOKEN
+}
+
+enum InvoiceStatus {
+  DRAFT
+  OPEN
+  PAID
+  VOID
+}
+
+enum PaymentMethod {
+  CASH
+  BANK_TRANSFER
+  PAYHERE
+  DIRECTPAY
+}
+
+enum PaymentStatus {
+  PENDING
+  SUCCESS
+  FAILED
+}
+
+enum ResourceType {
+  PHYSICAL
+  HUMAN
+}

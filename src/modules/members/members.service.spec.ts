@@ -1,9 +1,9 @@
 // src/modules/members/members.service.spec.ts
-import { Test, TestingModule } from '@nestjs/testing';
-import { MembersService } from './members.service';
-import { PrismaService } from '../../database/prisma.service';
-import { NotFoundException, ConflictException, ForbiddenException } from '@nestjs/common';
-import { Role, MembershipStatus } from '@prisma/client';
+import {Test, TestingModule} from '@nestjs/testing';
+import {MembersService} from './members.service';
+import {PrismaService} from '../../database/prisma.service';
+import {ForbiddenException} from '@nestjs/common';
+import {MembershipStatus, Role} from '@prisma/client';
 
 // 1. Mock Prisma Client reflecting the relational schema
 const mockPrismaService = {
@@ -12,6 +12,7 @@ const mockPrismaService = {
     },
     membership: {
         findUnique: jest.fn(),
+        findFirst: jest.fn(),
         findMany: jest.fn(),
         create: jest.fn(),
         update: jest.fn(),
@@ -50,19 +51,18 @@ describe('MembersService', () => {
                 id: 'mem-789',
                 tenantId,
                 userId: dto.userId,
-                status: MembershipStatus.ACTIVE,
+                status: MembershipStatus.PENDING,
                 roles: [{ role: Role.MEMBER }]
             };
             prisma.membership.create.mockResolvedValue(mockCreated);
 
             const result = await service.createMembership(tenantId, dto);
 
-            // FIX: Check for correct userId_tenantId compound key and nested roles create
             expect(prisma.membership.create).toHaveBeenCalledWith({
                 data: {
                     tenantId,
                     userId: dto.userId,
-                    status: MembershipStatus.ACTIVE,
+                    status: MembershipStatus.PENDING,
                     roles: {
                         create: { role: dto.initialRole }
                     }
@@ -72,19 +72,40 @@ describe('MembersService', () => {
             expect(result).toEqual(mockCreated);
         });
 
-        it('should throw ConflictException using the correct compound key', async () => {
+        it('should update existing membership status to PENDING and add role if not present', async () => {
             prisma.user.findUnique.mockResolvedValue({ id: 'user-456' });
-            // Simulate existing membership
-            prisma.membership.findUnique.mockResolvedValue({ id: 'existing' });
-
-            await expect(service.createMembership(tenantId, dto)).rejects.toThrow(ConflictException);
-
-            // Verify findUnique was called with the correct index name from schema
-            expect(prisma.membership.findUnique).toHaveBeenCalledWith({
-                where: {
-                    userId_tenantId: { userId: dto.userId, tenantId }
-                }
+            // Simulate existing membership without the initial role
+            prisma.membership.findUnique.mockResolvedValue({
+                id: 'existing-mem-id',
+                userId: dto.userId,
+                tenantId,
+                status: MembershipStatus.ACTIVE,
+                roles: []
             });
+
+            const mockUpdated = {
+                id: 'existing-mem-id',
+                tenantId,
+                userId: dto.userId,
+                status: MembershipStatus.PENDING,
+                roles: [{role: Role.MEMBER}]
+            };
+            prisma.membership.update.mockResolvedValue(mockUpdated);
+
+            const result = await service.createMembership(tenantId, dto);
+
+            expect(prisma.membership.update).toHaveBeenCalledWith({
+                where: {id: 'existing-mem-id'},
+                data: {
+                    status: MembershipStatus.PENDING,
+                    roles: {
+                        create: {role: dto.initialRole}
+                    },
+                    rfidTag: undefined
+                },
+                include: {user: true, roles: true}
+            });
+            expect(result).toEqual(mockUpdated);
         });
     });
 
@@ -96,7 +117,15 @@ describe('MembersService', () => {
             const mockMembership = { id: membershipId, userId: 'user-456', tenantId };
             prisma.membership.findUnique.mockResolvedValue(mockMembership);
 
-            const currentUser = { sub: 'admin-111', tenantRoles: { [tenantId]: Role.ORG_ADMIN } };
+            // requester has ORG_ADMIN role
+            prisma.membership.findFirst.mockResolvedValue({
+                id: 'requester-mem-id',
+                userId: 'admin-111',
+                tenantId,
+                roles: [{role: Role.ORG_ADMIN}]
+            });
+
+            const currentUser = {id: 'admin-111', isGlobalAdmin: false};
 
             const result = await service.getMemberById(tenantId, membershipId, currentUser);
             expect(result).toEqual(mockMembership);
@@ -106,8 +135,15 @@ describe('MembersService', () => {
             const mockMembership = { id: membershipId, userId: 'user-456', tenantId };
             prisma.membership.findUnique.mockResolvedValue(mockMembership);
 
-            // User is a MEMBER, not staff
-            const currentUser = { sub: 'user-999', tenantRoles: { [tenantId]: Role.MEMBER } };
+            // requester only has MEMBER role
+            prisma.membership.findFirst.mockResolvedValue({
+                id: 'requester-mem-id',
+                userId: 'user-999',
+                tenantId,
+                roles: [{role: Role.MEMBER}]
+            });
+
+            const currentUser = {id: 'user-999', isGlobalAdmin: false};
 
             await expect(service.getMemberById(tenantId, membershipId, currentUser)).rejects.toThrow(ForbiddenException);
         });
@@ -119,12 +155,15 @@ describe('MembersService', () => {
             const userId = 'user-1';
             const mockMembership = { id: 'mem-1', userId, tenantId };
 
-            prisma.membership.findUnique.mockResolvedValue(mockMembership);
+            prisma.membership.findFirst.mockResolvedValue(mockMembership);
 
             const result = await service.getMyMembership(tenantId, userId);
 
-            expect(prisma.membership.findUnique).toHaveBeenCalledWith({
-                where: { userId_tenantId: { userId, tenantId } },
+            expect(prisma.membership.findFirst).toHaveBeenCalledWith({
+                where: {
+                    tenantId: tenantId,
+                    user: {id: userId}
+                },
                 include: expect.anything()
             });
             expect(result).toEqual(mockMembership);
