@@ -20,6 +20,7 @@ import {CommsAuditModule} from "./modules/comms-audit/comms-audit.module";
 import {SystemModule} from "./modules/system/system.module";
 import {PlansModule} from "./modules/plans/plans.module";
 import {BullModule} from '@nestjs/bullmq';
+import {DevicesModule} from './modules/devices/devices.module';
 
 @Module({
     imports: [
@@ -37,9 +38,9 @@ import {BullModule} from '@nestjs/bullmq';
                 }
                 return {
                     connection: {
-                        host: configService.get('REDISHOST', 'localhost'),
-                        port: Number(configService.get('REDISPORT', '6379')),
-                        password: configService.get('REDISPASSWORD'),
+                        host: configService.get<string>('REDISHOST', 'localhost'),
+                        port: Number(configService.get<string>('REDISPORT', '6379')),
+                        password: configService.get<string>('REDISPASSWORD'),
                     },
                 };
             },
@@ -57,7 +58,8 @@ import {BullModule} from '@nestjs/bullmq';
         DocumentsModule,
         CommsAuditModule,
         SystemModule,
-        PlansModule
+        PlansModule,
+        DevicesModule
     ],
 })
 export class AppModule implements NestModule {

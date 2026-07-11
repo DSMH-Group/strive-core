@@ -44,6 +44,7 @@ model Tenant {
   resources           Resource[]
   plans               Plan[] // 🚀 NEW: Relation to the tenant's product catalog
   savedPaymentMethods SavedPaymentMethod[]
+  devices             Device[]
 
   @@map("tenants")
   @@schema("stride")
@@ -96,6 +97,7 @@ model Membership {
   user                User                @relation(fields: [userId], references: [id], onDelete: Cascade)
   activePlan          Plan?               @relation(fields: [activePlanId], references: [id], onDelete: SetNull) // 🚀 NEW: Link to Plan
   savedPaymentMethods SavedPaymentMethod[]
+  credentials         Credential[]
 
   @@unique([userId, tenantId])
   @@map("memberships")
@@ -408,6 +410,56 @@ model SavedPaymentMethod {
 
   membership Membership @relation(fields: [membershipId], references: [id])
   tenant     Tenant     @relation(fields: [tenantId], references: [id])
+
+  @@schema("stride")
+}
+
+model Device {
+  id          String   @id @default(uuid())
+  name        String
+  token       String   @unique
+  tenantId    String
+  location    String
+  direction   InOut    @default(IN)
+  status      Status   @default(ACTIVE)
+  createdAt   DateTime @default(now())
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@map("devices")
+  @@schema("stride")
+}
+
+model Credential {
+  id           String         @id @default(uuid())
+  type         CredentialType
+  tokenValue   String         @unique
+  membershipId String
+  membership   Membership     @relation(fields: [membershipId], references: [id], onDelete: Cascade)
+  createdAt    DateTime       @default(now())
+
+  @@map("credentials")
+  @@schema("stride")
+}
+
+enum InOut {
+  IN
+  OUT
+
+  @@schema("stride")
+}
+
+enum Status {
+  ACTIVE
+  INACTIVE
+
+  @@schema("stride")
+}
+
+enum CredentialType {
+  RFID
+  QR
+  NFC_SMART_TAP
+  FINGERPRINT
 
   @@schema("stride")
 }

@@ -20,6 +20,7 @@ export class RolesGuard implements CanActivate {
         if (!requiredRoles) return true;
 
         const request = context.switchToHttp().getRequest();
+        if (request.device) return true; // Bypass role checks for authenticated devices
         const user = request.user as User; // This is the DB User from JwtStrategy
         const tenantId = (request.headers['x-tenant-id'] as string)?.trim();
 
