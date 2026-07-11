@@ -3,10 +3,15 @@ import { Injectable, InternalServerErrorException } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
 import { BroadcastDto } from './dto/broadcast.dto';
 import {JsonObject} from "@prisma/client/runtime/client";
+import { InjectQueue } from '@nestjs/bullmq';
+import { Queue } from 'bullmq';
 
 @Injectable()
 export class CommsAuditService {
-    constructor(private readonly prisma: PrismaService) {}
+    constructor(
+        private readonly prisma: PrismaService,
+        @InjectQueue('comms') private readonly commsQueue: Queue,
+    ) {}
 
     /**
      * Broadcast logic: Fetches users based on filter and prepares for dispatch.
@@ -21,16 +26,31 @@ export class CommsAuditService {
             include: { user: true },
         });
 
-        // In a real-world scenario, you would push these to a background queue (Redis/BullMQ)
-        // to handle rate limits for Text.lk and Resend.
-        const recipients = members.map((m) => ({
-            phone: m.user.phone,
-            email: m.user.email,
-            name: m.user.firstName,
-        }));
+        const TEMPLATES: Record<string, string> = {
+            'sub_expiry': 'Dear {name}, your Strive subscription is expiring soon. Please renew at your earliest convenience.',
+            'payment_reminder': 'Dear {name}, this is a reminder regarding your outstanding invoice balance. Please settle it soon.',
+            'welcome': 'Welcome {name} to Strive! Your active membership plan has been provisioned.',
+        };
+
+        const jobs = members.map(async (m) => {
+            if (!m.user) return;
+            const templateText = TEMPLATES[dto.templateId] || 'Notification from Strive: Hello {name}.';
+            const messageText = templateText.replace('{name}', m.user.firstName || 'Member');
+
+            await this.commsQueue.add('dispatch', {
+                channel: dto.channel,
+                recipient: {
+                    phone: m.user.phone,
+                    email: m.user.email,
+                },
+                message: messageText,
+                subject: dto.templateId === 'payment_reminder' ? 'Payment Reminder' : 'Strive Gym Notification',
+            });
+        });
+        await Promise.all(jobs);
 
         return {
-            count: recipients.length,
+            count: members.length,
             status: 'QUEUED',
             channel: dto.channel,
         };

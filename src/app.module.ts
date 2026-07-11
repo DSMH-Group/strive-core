@@ -1,6 +1,6 @@
 // src/app.module.ts
 import {MiddlewareConsumer, Module, NestModule, RequestMethod} from '@nestjs/common';
-import {ConfigModule} from '@nestjs/config';
+import {ConfigModule, ConfigService} from '@nestjs/config';
 
 // Core Modules
 import {AuthModule} from './modules/auth/auth.module';
@@ -19,11 +19,32 @@ import {DocumentsModule} from "./modules/documents/documents.module";
 import {CommsAuditModule} from "./modules/comms-audit/comms-audit.module";
 import {SystemModule} from "./modules/system/system.module";
 import {PlansModule} from "./modules/plans/plans.module";
+import {BullModule} from '@nestjs/bullmq';
 
 @Module({
     imports: [
         // isGlobal: true makes ConfigService available everywhere without re-importing
         ConfigModule.forRoot({isGlobal: true}),
+        BullModule.forRootAsync({
+            useFactory: async (configService: ConfigService) => {
+                const redisUrl = configService.get<string>('REDIS_URL');
+                if (redisUrl) {
+                    return {
+                        connection: {
+                            url: redisUrl,
+                        },
+                    };
+                }
+                return {
+                    connection: {
+                        host: configService.get('REDISHOST', 'localhost'),
+                        port: Number(configService.get('REDISPORT', '6379')),
+                        password: configService.get('REDISPASSWORD'),
+                    },
+                };
+            },
+            inject: [ConfigService],
+        }),
         PrismaModule,
         AuthModule,
         UsersModule,
