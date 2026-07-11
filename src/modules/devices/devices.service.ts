@@ -91,7 +91,7 @@ export class DevicesService {
         }
 
         // 2. Resolve Membership (Credential Table -> RFID -> ID)
-        let membership = null;
+        let membership: any = null;
 
         const cred = await this.prisma.credential.findFirst({
             where: { tokenValue: scannedValue },
