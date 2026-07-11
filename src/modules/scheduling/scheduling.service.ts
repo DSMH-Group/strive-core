@@ -100,10 +100,15 @@ export class SchedulingService {
         return this.prisma.booking.findMany({
             where: whereClause,
             include: {
-                resource: true, // Includes resource details (name, type)
+                resource: true, 
+                membership: {
+                    include: {
+                        user: true
+                    }
+                }
             },
             orderBy: {
-                startTime: 'asc', // Critical: Sort chronologically so the first item is the "Next Session"
+                startTime: 'asc', 
             },
         });
     }
