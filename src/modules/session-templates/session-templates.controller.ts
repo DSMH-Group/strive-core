@@ -17,7 +17,7 @@ export class SessionTemplatesController {
     constructor(private readonly sessionTemplatesService: SessionTemplatesService) {}
 
     @Post()
-    @Roles('TRAINER', 'MEMBER')
+    @Roles('ORG_ADMIN', 'MANAGER', 'TRAINER')
     @ApiOperation({ summary: 'Create a session template' })
     @ApiResponse({ status: HttpStatus.CREATED, description: 'Template created.' })
     async createTemplate(
@@ -28,7 +28,7 @@ export class SessionTemplatesController {
     }
 
     @Get()
-    @Roles('TRAINER', 'MEMBER')
+    @Roles('ORG_ADMIN', 'MANAGER', 'TRAINER', 'MEMBER')
     @ApiOperation({ summary: 'List all session templates' })
     async getTemplates(
         @Headers('X-Tenant-ID') tenantId: string,
@@ -37,7 +37,7 @@ export class SessionTemplatesController {
     }
 
     @Patch(':id')
-    @Roles('TRAINER', 'MEMBER')
+    @Roles('ORG_ADMIN', 'MANAGER', 'TRAINER')
     @ApiOperation({ summary: 'Update a session template' })
     async updateTemplate(
         @Headers('X-Tenant-ID') tenantId: string,
@@ -48,7 +48,7 @@ export class SessionTemplatesController {
     }
 
     @Delete(':id')
-    @Roles('TRAINER', 'MEMBER')
+    @Roles('ORG_ADMIN', 'MANAGER', 'TRAINER')
     @ApiOperation({ summary: 'Delete a session template' })
     async deleteTemplate(
         @Headers('X-Tenant-ID') tenantId: string,
