@@ -24,6 +24,7 @@ import {DevicesModule} from './modules/devices/devices.module';
 import {SessionTemplatesModule} from './modules/session-templates/session-templates.module';
 import {ExercisesModule} from './modules/exercises/exercises.module';
 import {ProgramTemplatesModule} from './modules/program-templates/program-templates.module';
+import {MailingListsModule} from './modules/mailing-lists/mailing-lists.module';
 
 @Module({
     imports: [
@@ -65,7 +66,8 @@ import {ProgramTemplatesModule} from './modules/program-templates/program-templa
         DevicesModule,
         SessionTemplatesModule,
         ExercisesModule,
-        ProgramTemplatesModule
+        ProgramTemplatesModule,
+        MailingListsModule
     ],
 })
 export class AppModule implements NestModule {

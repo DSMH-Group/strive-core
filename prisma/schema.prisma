@@ -47,6 +47,7 @@ model Tenant {
   devices             Device[]
   sessionTemplates    SessionTemplate[]
   programTemplates    ProgramTemplate[]
+  mailingLists        MailingList[]
 
   @@map("tenants")
   @@schema("stride")
@@ -101,6 +102,7 @@ model Membership {
   activePlan          Plan?               @relation(fields: [activePlanId], references: [id], onDelete: SetNull) // 🚀 NEW: Link to Plan
   savedPaymentMethods SavedPaymentMethod[]
   credentials         Credential[]
+  mailingListMembers  MailingListMember[]
 
   @@unique([userId, tenantId])
   @@map("memberships")
@@ -525,5 +527,34 @@ model ProgramTemplate {
   tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@map("program_templates")
+  @@schema("stride")
+}
+
+model MailingList {
+  id          String   @id @default(uuid())
+  tenantId    String
+  name        String
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  members     MailingListMember[]
+  tenant      Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@map("mailing_lists")
+  @@schema("stride")
+}
+
+model MailingListMember {
+  id            String   @id @default(uuid())
+  mailingListId String
+  membershipId  String
+  createdAt     DateTime @default(now())
+
+  mailingList   MailingList @relation(fields: [mailingListId], references: [id], onDelete: Cascade)
+  membership    Membership  @relation(fields: [membershipId], references: [id], onDelete: Cascade)
+
+  @@unique([mailingListId, membershipId])
+  @@map("mailing_list_members")
   @@schema("stride")
 }

@@ -1,5 +1,4 @@
-// src/modules/comms-audit/dto/broadcast.dto.ts
-import { IsEnum, IsJSON, IsNotEmpty, IsObject, IsString } from 'class-validator';
+import { IsEnum, IsNotEmpty, IsObject, IsOptional, IsString } from 'class-validator';
 
 export enum CommunicationChannel {
     SMS = 'SMS',
@@ -18,4 +17,8 @@ export class BroadcastDto {
     @IsString()
     @IsNotEmpty()
     templateId: string;
+
+    @IsString()
+    @IsOptional()
+    customText?: string;
 }

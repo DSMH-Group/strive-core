@@ -34,7 +34,9 @@ export class CommsAuditService {
 
         const jobs = members.map(async (m) => {
             if (!m.user) return;
-            const templateText = TEMPLATES[dto.templateId] || 'Notification from Strive: Hello {name}.';
+            const templateText = dto.templateId === 'custom' && dto.customText 
+                ? dto.customText 
+                : (TEMPLATES[dto.templateId] || 'Notification from Strive: Hello {name}.');
             const messageText = templateText.replace('{name}', m.user.firstName || 'Member');
 
             await this.commsQueue.add('dispatch', {
