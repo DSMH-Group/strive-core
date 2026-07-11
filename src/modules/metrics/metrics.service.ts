@@ -12,11 +12,25 @@ export class MetricsService {
         // 1. Identify the membership context
         const targetMembershipId = await this.resolveMembershipId(tenantId, userId, dto.membershipId);
 
+        let metricData = dto.data;
+        if (dto.metricType.toUpperCase() === "TRAINER_NOTE") {
+            const caller = await this.prisma.user.findUnique({
+                where: { id: userId }
+            });
+            if (caller) {
+                metricData = {
+                    ...(dto.data as any),
+                    author: `${caller.firstName} ${caller.lastName}`,
+                    authorId: userId,
+                };
+            }
+        }
+
         return this.prisma.metric.create({
             data: {
                 membershipId: targetMembershipId,
                 metricType: dto.metricType.toUpperCase(),
-                data: dto.data as InputJsonValue,
+                data: metricData as InputJsonValue,
             },
         });
     }
