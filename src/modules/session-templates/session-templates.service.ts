@@ -19,10 +19,69 @@ export class SessionTemplatesService {
     }
 
     async getTemplates(tenantId: string) {
-        return this.prisma.sessionTemplate.findMany({
+        const templates = await this.prisma.sessionTemplate.findMany({
             where: { tenantId },
             orderBy: { createdAt: 'desc' },
         });
+
+        if (templates.length === 0) {
+            const defaults = [
+                {
+                    name: "Push Day",
+                    exercises: [
+                        { name: "Bench Press", sets: 4 },
+                        { name: "Overhead Press", sets: 3 },
+                        { name: "Incline Dumbbell Press", sets: 3 },
+                        { name: "Triceps Pushdown", sets: 3 },
+                    ]
+                },
+                {
+                    name: "Pull Volume",
+                    exercises: [
+                        { name: "Barbell Row", sets: 4 },
+                        { name: "Lat Pulldown", sets: 3 },
+                        { name: "Seated Cable Row", sets: 3 },
+                        { name: "Barbell Curl", sets: 3 },
+                    ]
+                },
+                {
+                    name: "Leg Conditioning",
+                    exercises: [
+                        { name: "Back Squat", sets: 5 },
+                        { name: "Romanian Deadlift", sets: 3 },
+                        { name: "Leg Press", sets: 3 },
+                        { name: "Calf Raise", sets: 4 },
+                    ]
+                },
+                {
+                    name: "Cardio Mesh",
+                    exercises: [
+                        { name: "Rowing Erg", sets: 3 },
+                        { name: "Treadmill Intervals", sets: 4 },
+                        { name: "Plank", sets: 3 },
+                    ]
+                }
+            ];
+
+            await Promise.all(
+                defaults.map(d => 
+                    this.prisma.sessionTemplate.create({
+                        data: {
+                            tenantId,
+                            name: d.name,
+                            exercises: d.exercises as Prisma.InputJsonValue,
+                        }
+                    })
+                )
+            );
+
+            return this.prisma.sessionTemplate.findMany({
+                where: { tenantId },
+                orderBy: { createdAt: 'desc' },
+            });
+        }
+
+        return templates;
     }
 
     async updateTemplate(tenantId: string, id: string, dto: UpdateSessionTemplateDto) {
