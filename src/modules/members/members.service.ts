@@ -1,5 +1,7 @@
 // src/modules/members/members.service.ts
 import {ConflictException, ForbiddenException, Injectable, Logger, NotFoundException} from '@nestjs/common';
+import { InjectQueue } from '@nestjs/bullmq';
+import { Queue } from 'bullmq';
 import {PrismaService} from '../../database/prisma.service';
 import {CreateMembershipDto, TransitionMembershipDto, UpdateMembershipDto} from './dto/members.dto';
 import {InvitationStatus, InvoiceStatus, InvoiceType, MembershipStatus, Role} from '@prisma/client';
@@ -9,7 +11,10 @@ import {CreateInvitationDto} from "./dto/invitations.dto";
 export class MembersService {
     private readonly logger = new Logger(MembersService.name);
 
-    constructor(private readonly prisma: PrismaService) {
+    constructor(
+        private readonly prisma: PrismaService,
+        @InjectQueue('comms') private readonly commsQueue: Queue,
+    ) {
     }
 
     async createMembership(tenantId: string, dto: CreateMembershipDto) {
@@ -331,7 +336,6 @@ export class MembersService {
         inviteId?: string,
         routingDomain?: string
     ): Promise<void> {
-        const tasks: Promise<void | any>[] = [];
         const baseUrl = process.env.NEXT_PUBLIC_WEBAPP_URL || 'https://dsmhgroup.com';
         let actionUrl = `${baseUrl}/register`;
 
@@ -339,30 +343,33 @@ export class MembersService {
             actionUrl = `${baseUrl}/register?inviteToken=${inviteId}&email=${encodeURIComponent(email)}&domain=${routingDomain}`;
         }
 
+        const tasks: Promise<any>[] = [];
+
         if (email) {
-            const emailTask = async () => {
-                this.logger.log(`[EMAIL] Dispatching ${templateType} to ${email}`);
-                this.logger.log(`[EMAIL PAYLOAD] Click here to activate your account: ${actionUrl}`);
-            };
-            tasks.push(emailTask());
+            const messageText = `Click here to activate your Strive account: ${actionUrl}`;
+            tasks.push(
+                this.commsQueue.add('dispatch', {
+                    channel: 'EMAIL',
+                    recipient: { email },
+                    message: messageText,
+                    subject: 'Activate your Strive Account',
+                })
+            );
         }
 
         if (phone) {
-            const smsTask = async () => {
-                this.logger.log(`[SMS] Dispatching ${templateType} to ${phone}`);
-                this.logger.log(`[SMS PAYLOAD] Join Stride: ${actionUrl}`);
-            };
-            tasks.push(smsTask());
+            const messageText = `Join Strive: ${actionUrl}`;
+            tasks.push(
+                this.commsQueue.add('dispatch', {
+                    channel: 'SMS',
+                    recipient: { phone },
+                    message: messageText,
+                })
+            );
         }
 
         if (tasks.length > 0) {
-            Promise.allSettled(tasks).then(results => {
-                results.forEach((result, index) => {
-                    if (result.status === 'rejected') {
-                        this.logger.error(`[Notification Dispatch Error] Task ${index} failed:`, result.reason);
-                    }
-                });
-            });
+            await Promise.allSettled(tasks);
         }
     }
 }

@@ -4,6 +4,7 @@ import {MembersService} from './members.service';
 import {PrismaService} from '../../database/prisma.service';
 import {ForbiddenException} from '@nestjs/common';
 import {MembershipStatus, Role} from '@prisma/client';
+import {getQueueToken} from '@nestjs/bullmq';
 
 // 1. Mock Prisma Client reflecting the relational schema
 const mockPrismaService = {
@@ -24,10 +25,15 @@ describe('MembersService', () => {
     let prisma: typeof mockPrismaService;
 
     beforeEach(async () => {
+        const mockCommsQueue = {
+            add: jest.fn(),
+        };
+
         const module: TestingModule = await Test.createTestingModule({
             providers: [
                 MembersService,
                 { provide: PrismaService, useValue: mockPrismaService },
+                { provide: getQueueToken('comms'), useValue: mockCommsQueue },
             ],
         }).compile();
 

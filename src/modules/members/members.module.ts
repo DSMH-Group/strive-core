@@ -4,7 +4,12 @@ import { MembersController } from './members.controller';
 import { MembersService } from './members.service';
 import { PrismaService } from '../../database/prisma.service';
 
+import { BullModule } from '@nestjs/bullmq';
+
 @Module({
+    imports: [
+        BullModule.registerQueue({ name: 'comms' }),
+    ],
     controllers: [MembersController],
     providers: [
         MembersService,
