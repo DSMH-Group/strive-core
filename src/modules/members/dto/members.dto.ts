@@ -61,6 +61,16 @@ export class UpdateMembershipDto {
     @IsString()
     @IsOptional()
     rfidTag?: string | null; // 👈 Allow explicit null from frontend
+
+    @ApiPropertyOptional({ enum: Role, example: Role.ORG_ADMIN, description: 'Assign or update member role' })
+    @IsEnum(Role)
+    @IsOptional()
+    initialRole?: Role;
+
+    @ApiPropertyOptional({ enum: Role, example: Role.ORG_ADMIN, description: 'Assign or update member role' })
+    @IsEnum(Role)
+    @IsOptional()
+    role?: Role;
 }
 
 export class TransitionMembershipDto {

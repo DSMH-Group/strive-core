@@ -27,10 +27,20 @@ export class CommsAuditService {
         });
 
         const TEMPLATES: Record<string, string> = {
-            'sub_expiry': 'Dear {name}, your Strive subscription is expiring soon. Please renew at your earliest convenience.',
-            'payment_reminder': 'Dear {name}, this is a reminder regarding your outstanding invoice balance. Please settle it soon.',
+            'sub_expiry': 'Dear {name}, your Strive subscription is expiring soon. Please renew at your earliest convenience to maintain uninterrupted facility access.',
+            'payment_reminder': 'Dear {name}, this is a reminder regarding your outstanding invoice balance. Please settle it soon via your member dashboard.',
             'welcome': 'Welcome {name} to Strive! Your active membership plan has been provisioned.',
+            'booking_reminder': 'Dear {name}, this is a reminder for your upcoming training session/class. We look forward to seeing you!',
         };
+
+        const SUBJECTS: Record<string, string> = {
+            'sub_expiry': 'Strive Membership Renewal Reminder',
+            'payment_reminder': 'Strive Payment Reminder: Outstanding Balance',
+            'welcome': 'Welcome to Strive!',
+            'booking_reminder': 'Upcoming Class & Session Reminder',
+        };
+
+        const webappUrl = process.env.NEXT_PUBLIC_WEBAPP_URL || 'https://dsmhgroup.com';
 
         const jobs = members.map(async (m) => {
             if (!m.user) return;
@@ -38,6 +48,7 @@ export class CommsAuditService {
                 ? dto.customText 
                 : (TEMPLATES[dto.templateId] || 'Notification from Strive: Hello {name}.');
             const messageText = templateText.replace('{name}', m.user.firstName || 'Member');
+            const subject = SUBJECTS[dto.templateId] || 'Notification from Strive';
 
             await this.commsQueue.add('dispatch', {
                 channel: dto.channel,
@@ -46,7 +57,9 @@ export class CommsAuditService {
                     email: m.user.email,
                 },
                 message: messageText,
-                subject: dto.templateId === 'payment_reminder' ? 'Payment Reminder' : 'Strive Gym Notification',
+                subject: subject,
+                actionUrl: `${webappUrl}/dashboard`,
+                actionText: 'Open Member Dashboard',
             });
         });
         await Promise.all(jobs);

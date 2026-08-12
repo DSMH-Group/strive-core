@@ -80,15 +80,17 @@ describe('CommsProcessor', () => {
             },
         } as Job;
 
-        mockConfigService.get.mockImplementation((key: string) => {
+        mockConfigService.get.mockImplementation((key: string, defaultValue?: string) => {
             if (key === 'RESEND_API_KEY') return 'valid-email-key';
-            return null;
+            if (key === 'RESEND_FROM_EMAIL') return 'onboarding@resend.dev';
+            return defaultValue || null;
         });
 
         // Mock global fetch
         const mockResponse = {
             ok: true,
             status: 200,
+            json: jest.fn().mockResolvedValue({ id: 'email-id' }),
             text: jest.fn().mockResolvedValue('{"id":"email-id"}'),
         };
         const globalFetch = jest.spyOn(global, 'fetch').mockResolvedValue(mockResponse as any);
@@ -98,12 +100,11 @@ describe('CommsProcessor', () => {
         expect(globalFetch).toHaveBeenCalledWith('https://api.resend.com/emails', expect.any(Object));
         const fetchArgs = globalFetch.mock.calls[0];
         expect(fetchArgs[0]).toBe('https://api.resend.com/emails');
-        expect(JSON.parse(fetchArgs[1].body)).toEqual({
-            from: 'onboarding@resend.dev',
-            to: ['test@example.com'],
-            subject: 'Gym Welcome',
-            html: '<p>Hello Email Member</p>',
-        });
+        const body = JSON.parse(fetchArgs[1].body);
+        expect(body.from).toBe('onboarding@resend.dev');
+        expect(body.to).toEqual(['test@example.com']);
+        expect(body.subject).toBe('Gym Welcome');
+        expect(body.html).toContain('Hello Email Member');
 
         globalFetch.mockRestore();
     });

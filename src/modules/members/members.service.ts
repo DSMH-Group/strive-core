@@ -154,11 +154,52 @@ export class MembersService {
     async updateMembership(tenantId: string, membershipId: string, dto: UpdateMembershipDto) {
         // 1. Verify target context scope exists inside isolation boundaries
         const membership = await this.prisma.membership.findUnique({
-            where: {id: membershipId}
+            where: {id: membershipId},
+            include: {user: true, tenant: true, roles: true}
         });
 
         if (!membership || membership.tenantId !== tenantId) {
             throw new NotFoundException('Membership context mapping not found within this tenant.');
+        }
+
+        const targetRole = dto.initialRole || dto.role;
+
+        if (targetRole) {
+            // Upsert or set the target role
+            const existingRole = membership.roles.find(r => r.role === targetRole);
+            if (!existingRole) {
+                // Remove old roles if updating staff role, or add new role
+                await this.prisma.membershipRole.deleteMany({
+                    where: { membershipId }
+                });
+                await this.prisma.membershipRole.create({
+                    data: {
+                        membershipId,
+                        role: targetRole
+                    }
+                });
+
+                // Send notification email if user has email
+                if (membership.user?.email) {
+                    const roleLabelMap: Record<string, string> = {
+                        'ORG_ADMIN': 'Organization Administrator',
+                        'MANAGER': 'Facility Manager',
+                        'TRAINER': 'Trainer / Coach',
+                        'MEMBER': 'Member',
+                    };
+                    const roleTitle = roleLabelMap[targetRole] || targetRole;
+                    const baseUrl = process.env.NEXT_PUBLIC_WEBAPP_URL || 'https://dsmhgroup.com';
+
+                    await this.commsQueue.add('dispatch', {
+                        channel: 'EMAIL',
+                        recipient: { email: membership.user.email },
+                        subject: `Strive Role Assignment: ${roleTitle}`,
+                        message: `Hello ${membership.user.firstName || 'User'},\n\nYour permissions for ${membership.tenant?.name || 'your workspace'} have been updated. You have been assigned the role of ${roleTitle}.\n\nYou now have administrative/operational access according to your new role assignment.`,
+                        actionUrl: `${baseUrl}/login`,
+                        actionText: 'Access Workspace',
+                    }).catch(err => this.logger.error(`Failed to dispatch role update email: ${err.message}`));
+                }
+            }
         }
 
         // 2. Map payload dynamically into target Prisma configuration
@@ -178,6 +219,7 @@ export class MembersService {
                 rfidTag: dto.rfidTag === undefined ? membership.rfidTag : dto.rfidTag,
             },
             include: {
+                user: true,
                 roles: true,
                 activePlan: true // Perfect match for frontend mapping expectations
             }
@@ -236,13 +278,13 @@ export class MembersService {
         });
 
         if (existingUser) {
-            this.dispatchNotifications(dto.email, dto.phone, 'INVITATION_RECEIVED', tenantId, pendingInvite.id, routingDomain);
+            this.dispatchNotifications(dto.email, dto.phone, 'INVITATION_RECEIVED', tenantId, pendingInvite.id, routingDomain, dto.initialRole);
             return {
                 message: 'Invitation sent to existing user. Awaiting their acceptance.',
                 pendingInvite
             };
         } else {
-            this.dispatchNotifications(dto.email, dto.phone, 'INVITATION_SENT', tenantId, pendingInvite.id, routingDomain);
+            this.dispatchNotifications(dto.email, dto.phone, 'INVITATION_SENT', tenantId, pendingInvite.id, routingDomain, dto.initialRole);
             return {
                 message: 'Invitation sent successfully to new user.',
                 pendingInvite
@@ -324,7 +366,7 @@ export class MembersService {
         if (!invite || invite.tenantId !== tenantId) throw new NotFoundException('Invite not found.');
         if (invite.status !== InvitationStatus.PENDING) throw new ConflictException('Only pending invites can be resent.');
 
-        this.dispatchNotifications(invite.email, invite.phone, 'INVITATION_SENT', tenantId, invite.id);
+        this.dispatchNotifications(invite.email, invite.phone, 'INVITATION_SENT', tenantId, invite.id, undefined, invite.role);
         return {message: 'Invitation resent successfully.'};
     }
 
@@ -334,7 +376,8 @@ export class MembersService {
         templateType: string = 'INVITATION_SENT',
         tenantId?: string,
         inviteId?: string,
-        routingDomain?: string
+        routingDomain?: string,
+        role?: Role
     ): Promise<void> {
         const baseUrl = process.env.NEXT_PUBLIC_WEBAPP_URL || 'https://dsmhgroup.com';
         let actionUrl = `${baseUrl}/register`;
@@ -343,22 +386,42 @@ export class MembersService {
             actionUrl = `${baseUrl}/register?inviteToken=${inviteId}&email=${encodeURIComponent(email)}&domain=${routingDomain}`;
         }
 
+        const roleLabelMap: Record<string, string> = {
+            'ORG_ADMIN': 'Organization Administrator',
+            'MANAGER': 'Facility Manager',
+            'TRAINER': 'Trainer / Coach',
+            'MEMBER': 'Member',
+        };
+
+        const roleTitle = role ? (roleLabelMap[role] || role) : 'Member';
+
+        const subjectMap: Record<string, string> = {
+            'ORG_ADMIN': 'Invitation: You have been added as an Administrator on Strive',
+            'MANAGER': 'Invitation: You have been added as a Facility Manager on Strive',
+            'TRAINER': 'Invitation: You have been added as a Trainer on Strive',
+            'MEMBER': 'Activate your Strive Membership Account',
+        };
+
+        const emailSubject = role ? (subjectMap[role] || 'Activate your Strive Account') : 'Activate your Strive Account';
+
         const tasks: Promise<any>[] = [];
 
         if (email) {
-            const messageText = `Click here to activate your Strive account: ${actionUrl}`;
+            const messageText = `You have been invited to join Strive as a ${roleTitle}.\n\nPlease click the button below to complete your account registration and activate your workspace access.`;
             tasks.push(
                 this.commsQueue.add('dispatch', {
                     channel: 'EMAIL',
                     recipient: { email },
                     message: messageText,
-                    subject: 'Activate your Strive Account',
+                    subject: emailSubject,
+                    actionUrl: actionUrl,
+                    actionText: 'Activate Account & Join',
                 })
             );
         }
 
         if (phone) {
-            const messageText = `Join Strive: ${actionUrl}`;
+            const messageText = `Join Strive (${roleTitle}): ${actionUrl}`;
             tasks.push(
                 this.commsQueue.add('dispatch', {
                     channel: 'SMS',

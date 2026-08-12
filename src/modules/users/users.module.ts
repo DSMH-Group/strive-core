@@ -1,13 +1,15 @@
-// src/modules/users/users.module.ts
 import { Module } from '@nestjs/common';
+import { BullModule } from '@nestjs/bullmq';
 import { UsersController } from './users.controller';
 import { UsersService } from './users.service';
-// Note: If you have a dedicated PrismaModule, import that into the imports[] array instead of providing the service directly.
 import { PrismaService } from '../../database/prisma.service';
 
 @Module({
-  controllers: [UsersController], // <-- This instantly populates your Swagger UI
+  imports: [
+    BullModule.registerQueue({ name: 'comms' })
+  ],
+  controllers: [UsersController],
   providers: [UsersService, PrismaService],
-  exports: [UsersService], // Essential for our Modular Monolith architecture
+  exports: [UsersService],
 })
 export class UsersModule {}

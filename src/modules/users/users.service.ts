@@ -1,5 +1,6 @@
-// src/modules/users/users.service.ts
 import {BadRequestException, Injectable, InternalServerErrorException, Logger, NotFoundException} from '@nestjs/common';
+import { InjectQueue } from '@nestjs/bullmq';
+import { Queue } from 'bullmq';
 import {SyncUserWebhookDto} from './dto/sync-user.dto';
 import {UpdateUserDto} from './dto/update-user.dto';
 import {PrismaService} from '../../database/prisma.service';
@@ -9,7 +10,10 @@ import {InvitationStatus, MembershipStatus} from "@prisma/client";
 export class UsersService {
     private readonly logger = new Logger(UsersService.name);
 
-    constructor(private readonly prisma: PrismaService) {
+    constructor(
+        private readonly prisma: PrismaService,
+        @InjectQueue('comms') private readonly commsQueue: Queue,
+    ) {
     }
 
     /**
@@ -22,9 +26,13 @@ export class UsersService {
         }
 
         try {
-            return await this.prisma.$transaction(async (tx) => {
+            const existingUserBeforeSync = await this.prisma.user.findUnique({
+                where: { keycloakId: dto.keycloakId }
+            });
+
+            const user = await this.prisma.$transaction(async (tx) => {
                 // 1. Upsert the Global User Profile
-                const user = await tx.user.upsert({
+                const userRecord = await tx.user.upsert({
                     where: {keycloakId: dto.keycloakId},
                     update: {
                         email: dto.email,
@@ -46,8 +54,8 @@ export class UsersService {
                     where: {
                         status: InvitationStatus.PENDING,
                         OR: [
-                            {email: user.email},
-                            ...(user.phone ? [{phone: user.phone}] : [])
+                            {email: userRecord.email},
+                            ...(userRecord.phone ? [{phone: userRecord.phone}] : [])
                         ]
                     }
                 });
@@ -55,10 +63,9 @@ export class UsersService {
                 // 3. Claim invites and generate memberships
                 if (pendingInvites.length > 0) {
                     for (const invite of pendingInvites) {
-                        // Use findFirst if standard compound index syntax varies across deployment schemas
                         const existingMembership = await tx.membership.findFirst({
                             where: {
-                                userId: user.id,
+                                userId: userRecord.id,
                                 tenantId: invite.tenantId
                             }
                         });
@@ -67,7 +74,7 @@ export class UsersService {
                             await tx.membership.create({
                                 data: {
                                     tenantId: invite.tenantId,
-                                    userId: user.id,
+                                    userId: userRecord.id,
                                     status: MembershipStatus.ACTIVE,
                                     roles: {
                                         create: {role: invite.role}
@@ -82,12 +89,27 @@ export class UsersService {
                             data: {status: InvitationStatus.CLAIMED}
                         });
 
-                        this.logger.log(`Auto-linked user ${user.id} to tenant ${invite.tenantId}`);
+                        this.logger.log(`Auto-linked user ${userRecord.id} to tenant ${invite.tenantId}`);
                     }
                 }
 
-                return user;
+                return userRecord;
             });
+
+            // If this is a new user registration, dispatch Welcome Email
+            if (!existingUserBeforeSync && user.email) {
+                const webappUrl = process.env.NEXT_PUBLIC_WEBAPP_URL || 'https://dsmhgroup.com';
+                await this.commsQueue.add('dispatch', {
+                    channel: 'EMAIL',
+                    recipient: { email: user.email },
+                    subject: 'Welcome to Strive!',
+                    message: `Hello ${user.firstName || 'Member'},\n\nWelcome to Strive! Your account identity profile has been successfully provisioned. You can now access your fitness memberships, schedules, and training programs.`,
+                    actionUrl: `${webappUrl}/login`,
+                    actionText: 'Sign In to Strive',
+                }).catch(err => this.logger.error(`Failed to enqueue welcome email for ${user.email}`, err.stack));
+            }
+
+            return user;
         } catch (error) {
             this.logger.error(`Failed to sync Keycloak user or process invites: ${dto.keycloakId}`, error.stack);
             throw new InternalServerErrorException('Database synchronization failed.');
