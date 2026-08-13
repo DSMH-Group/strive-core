@@ -124,6 +124,41 @@ async function runEndToEndEmailTests() {
             message: 'Dear Strive Member,\n\nPlease be advised that scheduled maintenance will occur this Sunday between 02:00 AM and 04:00 AM UTC. Mobile check-in and booking services will remain online.',
             actionUrl: 'https://dsmhgroup.com',
             actionText: 'View Status Page'
+        },
+        {
+            name: '6. Email Verification Email',
+            subject: 'Verify your Strive Email Address',
+            message: 'Hello Alex,\n\nThank you for signing up for Strive! Please click the button below to verify your email address and activate your account.',
+            actionUrl: 'https://dsmhgroup.com/verify-email?token=test-token-123',
+            actionText: 'Verify Email Address'
+        },
+        {
+            name: '7. Password Reset Email',
+            subject: 'Reset your Strive Password',
+            message: 'Hello Alex,\n\nWe received a request to reset your Strive account password. Click the button below to set a new password. If you did not request this, you can ignore this email.',
+            actionUrl: 'https://dsmhgroup.com/reset-password?token=test-token-456',
+            actionText: 'Reset Password'
+        },
+        {
+            name: '8. Email Change Confirmation Email',
+            subject: 'Confirm Email Address Change',
+            message: 'Hello Alex,\n\nYou requested to change your account email to admin@gwinnovations.lk. Please click the button below to confirm this change.',
+            actionUrl: 'https://dsmhgroup.com/confirm-email-change?token=test-token-789',
+            actionText: 'Confirm Email Change'
+        },
+        {
+            name: '9. Gym Addition / Membership Confirmation Email',
+            subject: 'Welcome to FitForge Gym! Membership Confirmed',
+            message: 'Hello Alex,\n\nYour membership for FitForge Gym has been successfully activated! You can now access your member portal, view workout programs, and check in at the facility.',
+            actionUrl: 'https://dsmhgroup.com/dashboard',
+            actionText: 'Access Member Portal'
+        },
+        {
+            name: '10. Payment Receipt / Confirmation Email',
+            subject: 'Payment Receipt: Invoice #INV-88492',
+            message: 'Hello Alex,\n\nThank you for your payment! We have received LKR 12,500.00 via PayHere for Invoice #INV-88492.\n\nYour membership status has been updated to ACTIVE.',
+            actionUrl: 'https://dsmhgroup.com/dashboard/invoices',
+            actionText: 'View Invoices'
         }
     ];
 

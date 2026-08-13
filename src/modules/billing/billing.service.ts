@@ -1,5 +1,6 @@
-// src/modules/billing/billing.service.ts
-import {BadRequestException, ForbiddenException, Injectable, NotFoundException} from '@nestjs/common';
+import {BadRequestException, ForbiddenException, Injectable, Logger, NotFoundException} from '@nestjs/common';
+import { InjectQueue } from '@nestjs/bullmq';
+import { Queue } from 'bullmq';
 import {PrismaService} from '../../database/prisma.service';
 import {CheckoutInvoiceDto, CreateInvoiceDto, ManualPaymentDto, SubscribeDto, TopUpDto} from './dto/billing.dto';
 import {InvoiceStatus, InvoiceType, MembershipStatus, PaymentMethod, PaymentStatus} from '@prisma/client';
@@ -7,7 +8,12 @@ import * as crypto from 'crypto';
 
 @Injectable()
 export class BillingService {
-    constructor(private readonly prisma: PrismaService) {}
+    private readonly logger = new Logger(BillingService.name);
+
+    constructor(
+        private readonly prisma: PrismaService,
+        @InjectQueue('comms') private readonly commsQueue: Queue,
+    ) {}
 
     async createInvoice(tenantId: string, dto: CreateInvoiceDto) {
         const totalAmount = dto.lineItems.reduce((sum, item) => sum + item.amount, 0);
@@ -43,15 +49,16 @@ export class BillingService {
     }
 
     async processManualPayment(tenantId: string, dto: ManualPaymentDto, adminId: string) {
-        return this.prisma.$transaction(async (tx) => {
+        const payment = await this.prisma.$transaction(async (tx) => {
             const invoice = await tx.invoice.findUnique({
-                where: { id: dto.invoiceId, tenantId }
+                where: { id: dto.invoiceId, tenantId },
+                include: { membership: { include: { user: true } } }
             });
 
             if (!invoice) throw new NotFoundException('Invoice not found.');
             if (invoice.status === InvoiceStatus.PAID) throw new BadRequestException('Invoice already settled.');
 
-            const payment = await tx.payment.create({
+            const paymentRecord = await tx.payment.create({
                 data: {
                     invoiceId: dto.invoiceId,
                     amount: dto.amount,
@@ -77,8 +84,23 @@ export class BillingService {
                 }
             });
 
-            return payment;
+            return { payment: paymentRecord, userEmail: invoice.membership?.user?.email, userName: invoice.membership?.user?.firstName };
         });
+
+        // Dispatch Payment Receipt Email
+        if (payment.userEmail) {
+            const webappUrl = process.env.NEXT_PUBLIC_WEBAPP_URL || 'https://dsmhgroup.com';
+            await this.commsQueue.add('dispatch', {
+                channel: 'EMAIL',
+                recipient: { email: payment.userEmail },
+                subject: `Payment Receipt: Invoice #${dto.invoiceId.substring(0, 8)}`,
+                message: `Hello ${payment.userName || 'Member'},\n\nThank you for your payment! We have received LKR ${payment.payment.amount} via ${payment.payment.method} for Invoice #${dto.invoiceId.substring(0, 8)}.\n\nYour account has been updated accordingly.`,
+                actionUrl: `${webappUrl}/dashboard`,
+                actionText: 'View Invoices',
+            }).catch(err => this.logger.error(`Failed to dispatch payment receipt email: ${err.message}`));
+        }
+
+        return payment.payment;
     }
 
     // ====================================================================

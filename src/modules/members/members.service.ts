@@ -295,14 +295,14 @@ export class MembersService {
     async acceptInvitation(userId: string, inviteId: string) {
         const invite = await this.prisma.tenantInvitation.findUnique({
             where: {id: inviteId},
-            include: {plan: true}
+            include: {plan: true, tenant: true}
         });
 
         if (!invite) throw new NotFoundException('Invitation not found.');
         if (invite.status !== InvitationStatus.PENDING) throw new ConflictException('Invitation is no longer valid or has already been claimed.');
         if (invite.expiresAt < new Date()) throw new ConflictException('Invitation has expired.');
 
-        return this.prisma.$transaction(async (tx) => {
+        const result = await this.prisma.$transaction(async (tx) => {
             await tx.tenantInvitation.update({
                 where: {id: inviteId},
                 data: {status: InvitationStatus.CLAIMED}
@@ -318,7 +318,7 @@ export class MembersService {
                         create: {role: invite.role}
                     }
                 },
-                include: {user: true, roles: true, activePlan: true}
+                include: {user: true, roles: true, activePlan: true, tenant: true}
             });
 
             if (invite.planId && invite.plan) {
@@ -342,6 +342,23 @@ export class MembersService {
 
             return membership;
         });
+
+        // Dispatch Membership Activation & Gym Welcome Email
+        if (result.user?.email) {
+            const webappUrl = process.env.NEXT_PUBLIC_WEBAPP_URL || 'https://dsmhgroup.com';
+            const gymName = invite.tenant?.name || 'Strive Facility';
+
+            await this.commsQueue.add('dispatch', {
+                channel: 'EMAIL',
+                recipient: { email: result.user.email },
+                subject: `Welcome to ${gymName}! Membership Confirmed`,
+                message: `Hello ${result.user.firstName || 'Member'},\n\nYour membership for ${gymName} has been successfully activated! You can now access your member portal, view workout programs, and check in at the facility.`,
+                actionUrl: `${webappUrl}/dashboard`,
+                actionText: 'Access Member Portal',
+            }).catch(err => this.logger.error(`Failed to dispatch gym welcome email: ${err.message}`));
+        }
+
+        return result;
     }
 
     async getPendingInvites(tenantId: string) {
